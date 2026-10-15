@@ -734,6 +734,31 @@ def toggle_user_active_status(
         "is_active": user.is_active
     }
 
+@router.delete("/users/{user_id}")
+def delete_user_account(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    if current_user and current_user.id == user.id:
+        raise HTTPException(status_code=400, detail="Action prohibited: Cannot delete your own admin account.")
+
+    if user.role == "Admin":
+        admin_count = db.query(User).filter(User.role == "Admin").count()
+        if admin_count <= 1:
+            raise HTTPException(status_code=400, detail="Action prohibited: Cannot delete the last remaining Administrator.")
+
+    # Remove associated audit logs
+    db.query(AuditLog).filter(AuditLog.user_id == user.id).delete()
+    db.delete(user)
+    db.commit()
+
+    return {"success": True, "message": f"User {user.email} successfully deleted."}
+
 
 # =====================================================================
 # 5. AUDIT LOGS (FILTER & CSV EXPORT)

@@ -292,7 +292,12 @@ function initAuthClient() {
                     })
                 });
 
-                const data = await response.json();
+                let data = {};
+                try {
+                    data = await response.json();
+                } catch (_) {
+                    data = { detail: "Server error (" + response.status + "). Please try again." };
+                }
 
                 if (!response.ok) {
                     submitBtn.disabled = false;
@@ -641,7 +646,12 @@ function initAuthClient() {
                     })
                 });
 
-                const data = await response.json();
+                let data = {};
+                try {
+                    data = await response.json();
+                } catch (_) {
+                    data = { detail: "Server error (" + response.status + "). Please try again." };
+                }
 
                 if (!response.ok) {
                     submitBtn.disabled = false;
