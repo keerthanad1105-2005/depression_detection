@@ -39,8 +39,10 @@ backend/reports/
 !backend/reports/.gitkeep
 
 # Heavy ML Weights & Checkpoints (Load from HF Hub or Bucket)
-models/
-backend/models/
+/models/
+/backend/models/
+!backend/app/models/
+!backend/app/models/**
 *.pth
 *.pt
 *.bin
@@ -76,3 +78,6 @@ run_all_tests.py
 .DS_Store
 Thumbs.db
 *.swp
+
+**/__pycache__/
+*.pyc
