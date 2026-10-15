@@ -141,7 +141,13 @@ window.handleGoogleLogin = async function() {
                 })
             });
 
-            const data = await resp.json();
+            let data = {};
+            try {
+                data = await resp.json();
+            } catch (_) {
+                data = { detail: "Authentication server returned an unformatted response (" + resp.status + ")." };
+            }
+
             if (!resp.ok) {
                 showAlert("authAlert", data.detail || "Google sign in failed.", "error");
                 return;
@@ -167,7 +173,7 @@ window.handleGoogleLogin = async function() {
         }
     } catch (err) {
         console.error("Google sign in error:", err);
-        showAlert("authAlert", "Google sign-in temporarily unavailable.", "error");
+        showAlert("authAlert", err.message || "Google sign-in temporarily unavailable.", "error");
     }
 };
 
@@ -194,7 +200,12 @@ async function checkGoogleOAuthCallback() {
                             role: "User"
                         })
                     });
-                    const data = await resp.json();
+                    let data = {};
+                    try {
+                        data = await resp.json();
+                    } catch (_) {
+                        data = { detail: "Authentication server returned an unformatted response (" + resp.status + ")." };
+                    }
                     if (resp.ok && data.access_token) {
                         localStorage.setItem("access_token", data.access_token);
                         localStorage.setItem("refresh_token", data.refresh_token);
@@ -207,6 +218,8 @@ async function checkGoogleOAuthCallback() {
                         }
                         window.location.replace("index.html");
                         return;
+                    } else {
+                        showAlert("authAlert", data.detail || "Google authentication failed.", "error");
                     }
                 }
             } catch (e) {

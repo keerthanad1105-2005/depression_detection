@@ -2,6 +2,7 @@ import uuid
 import re
 import time
 import json
+import logging
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from sqlalchemy.orm import Session
@@ -19,6 +20,8 @@ from app.schemas.auth import (
     TokenResponse, UserResponse
 )
 from app.api.deps import require_auth_user
+
+logger = logging.getLogger("mindscan.auth")
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -208,47 +211,70 @@ def register_user(payload: UserRegister, request: Request, db: Session = Depends
         clinician_status = None
         audit_action = "register"
 
-    # The email IS the username
-    user = User(
-        id=str(uuid.uuid4()),
-        username=clean_email,
-        email=clean_email,
-        password_hash=hash_password(payload.password),
-        full_name=clean_name,
-        role=assigned_role,
-        clinician_status=clinician_status,
-        is_active=True,
-        email_verified=True
-    )
-    db.add(user)
+    # The email IS the primary identifier; create safe unique username under 50 chars
+    uname_seed = re.sub(r'[^a-zA-Z0-9_]', '_', clean_email.split("@")[0])[:35] or "user"
+    candidate_uname = uname_seed
+    counter = 1
+    while db.query(User).filter(User.username == candidate_uname).first() is not None:
+        candidate_uname = f"{uname_seed[:30]}_{counter}"
+        counter += 1
 
-    audit_details["assigned_role"] = assigned_role
-    audit_details["clinician_status"] = clinician_status
-    audit = AuditLog(
-        user_id=user.id,
-        action=audit_action,
-        resource="auth",
-        details_json=json.dumps(audit_details)
-    )
-    db.add(audit)
-    db.commit()
-    db.refresh(user)
+    try:
+        user = User(
+            id=str(uuid.uuid4()),
+            username=candidate_uname,
+            email=clean_email,
+            password_hash=hash_password(payload.password),
+            full_name=clean_name,
+            role=assigned_role,
+            clinician_status=clinician_status,
+            is_active=True,
+            email_verified=True
+        )
+        db.add(user)
+        db.flush()
 
-    access_token = create_access_token({
-        "sub": user.id,
-        "role": user.role,
-        "email": user.email,
-        "username": user.username,
-        "full_name": user.full_name
-    })
-    refresh_token = create_refresh_token({"sub": user.id})
+        try:
+            audit_details["assigned_role"] = assigned_role
+            audit_details["clinician_status"] = clinician_status
+            audit = AuditLog(
+                user_id=user.id,
+                action=audit_action,
+                resource="auth",
+                details_json=json.dumps(audit_details)
+            )
+            db.add(audit)
+        except Exception as audit_err:
+            logger.warning(f"Registration audit log failed: {audit_err}")
 
-    return {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": "bearer",
-        "user": user
-    }
+        db.commit()
+        db.refresh(user)
+
+        access_token = create_access_token({
+            "sub": user.id,
+            "role": user.role,
+            "email": user.email,
+            "username": user.username,
+            "full_name": user.full_name
+        })
+        refresh_token = create_refresh_token({"sub": user.id})
+
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+            "user": user
+        }
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"User registration failure: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Registration failed: {str(e)}"
+        )
 
 @router.post("/login", response_model=TokenResponse)
 def login_user(payload: UserLogin, request: Request, db: Session = Depends(get_db)):
@@ -319,62 +345,95 @@ def google_auth(payload: GoogleLogin, db: Session = Depends(get_db)):
     A first-time Google user is automatically registered; a returning user signs in directly.
     Saves and displays the user's real name and email from their Google account.
     """
-    email_clean = payload.email.strip().lower()
-    user = db.query(User).filter(User.email == email_clean).first()
+    try:
+        email_clean = payload.email.strip().lower()
+        user = db.query(User).filter(User.email == email_clean).first()
 
-    # Determine real display name from Google profile or email structure
-    raw_name = (payload.full_name or "").strip()
-    if not raw_name or raw_name.lower() in ("google user", "google test user"):
-        # Format name from email (e.g. dev.patel@gmail.com -> Dev Patel)
-        prefix = email_clean.split("@")[0].replace(".", " ").replace("_", " ")
-        resolved_name = " ".join([word.capitalize() for word in prefix.split() if not word.isdigit()]) or "User"
-    else:
-        resolved_name = raw_name
+        # Determine real display name from Google profile or email structure
+        raw_name = (payload.full_name or "").strip()
+        if not raw_name or raw_name.lower() in ("google user", "google test user"):
+            # Format name from email (e.g. dev.patel@gmail.com -> Dev Patel)
+            prefix = email_clean.split("@")[0].replace(".", " ").replace("_", " ")
+            resolved_name = " ".join([word.capitalize() for word in prefix.split() if not word.isdigit()]) or "User"
+        else:
+            resolved_name = raw_name
 
-    if not user:
-        user = User(
-            id=str(uuid.uuid4()),
-            username=email_clean,
-            email=email_clean,
-            password_hash=hash_password(str(uuid.uuid4())),
-            full_name=resolved_name,
-            role="User",
-            clinician_status=None,
-            is_active=True,
-            email_verified=True
+        if not user:
+            # Generate a safe, unique username under 50 characters
+            uname_seed = re.sub(r'[^a-zA-Z0-9_]', '_', email_clean.split("@")[0])[:35] or "user"
+            candidate_uname = uname_seed
+            counter = 1
+            while db.query(User).filter(User.username == candidate_uname).first() is not None:
+                candidate_uname = f"{uname_seed[:30]}_{counter}"
+                counter += 1
+
+            user = User(
+                id=str(uuid.uuid4()),
+                username=candidate_uname,
+                email=email_clean,
+                password_hash=hash_password(str(uuid.uuid4())),
+                full_name=resolved_name,
+                role="User",
+                clinician_status=None,
+                is_active=True,
+                email_verified=True
+            )
+            db.add(user)
+            db.flush()
+
+            try:
+                audit = AuditLog(
+                    user_id=user.id,
+                    action="google_register",
+                    resource="auth",
+                    details_json=json.dumps({"email": email_clean, "full_name": resolved_name})
+                )
+                db.add(audit)
+            except Exception as audit_err:
+                logger.warning(f"Failed to record google_register audit log: {audit_err}")
+        else:
+            # Always update name if user previously had generic "Google User" or if real name provided
+            if user.full_name in ("Google User", "Google Test User", "", None) or (raw_name and raw_name.lower() not in ("google user", "google test user")):
+                user.full_name = resolved_name
+            try:
+                audit = AuditLog(
+                    user_id=user.id,
+                    action="google_login",
+                    resource="auth",
+                    details_json=json.dumps({"email": email_clean, "full_name": user.full_name})
+                )
+                db.add(audit)
+            except Exception as audit_err:
+                logger.warning(f"Failed to record google_login audit log: {audit_err}")
+
+        db.commit()
+        db.refresh(user)
+
+        access_token = create_access_token({
+            "sub": user.id,
+            "role": user.role,
+            "email": user.email,
+            "username": user.username or user.email,
+            "full_name": user.full_name
+        })
+        refresh_token = create_refresh_token({"sub": user.id})
+
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+            "user": user
+        }
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Google authentication error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Google authentication failed: {str(e)}"
         )
-        db.add(user)
-        audit = AuditLog(
-            user_id=user.id,
-            action="google_register",
-            resource="auth",
-            details_json=json.dumps({"email": email_clean, "full_name": resolved_name})
-        )
-        db.add(audit)
-    else:
-        # Always update name if user previously had generic "Google User" or if real name provided
-        if user.full_name in ("Google User", "Google Test User", "", None) or (raw_name and raw_name.lower() not in ("google user", "google test user")):
-            user.full_name = resolved_name
-        audit = AuditLog(
-            user_id=user.id,
-            action="google_login",
-            resource="auth",
-            details_json=json.dumps({"email": email_clean, "full_name": user.full_name})
-        )
-        db.add(audit)
-
-    db.commit()
-    db.refresh(user)
-
-    access_token = create_access_token({"sub": user.id, "role": user.role, "email": user.email, "username": user.username, "full_name": user.full_name})
-    refresh_token = create_refresh_token({"sub": user.id})
-
-    return {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": "bearer",
-        "user": user
-    }
 
 @router.post("/logout")
 def logout_endpoint(current_user: User = Depends(require_auth_user), db: Session = Depends(get_db)):
