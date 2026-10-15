@@ -2,8 +2,12 @@ import os
 import uuid
 import pytest
 from fastapi.testclient import TestClient
-from backend.main import app
-from backend.app.core.config import settings
+try:
+    from backend.main import app
+    from backend.app.core.config import settings
+except ImportError:
+    from main import app
+    from app.core.config import settings
 
 client = TestClient(app)
 

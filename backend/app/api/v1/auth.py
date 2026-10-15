@@ -4,6 +4,7 @@ import time
 import json
 import logging
 from datetime import datetime, timedelta
+from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -17,7 +18,7 @@ from app.core.security import (
 )
 from app.schemas.auth import (
     UserRegister, UserLogin, GoogleLogin, PasswordResetRequest, PasswordResetConfirm,
-    TokenResponse, UserResponse
+    TokenResponse, UserResponse, TokenRefreshRequest
 )
 from app.api.deps import require_auth_user
 
@@ -303,7 +304,7 @@ def login_user(payload: UserLogin, request: Request, db: Session = Depends(get_d
         record_failed_login(rate_limit_key)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username/email or password."
+            detail="Incorrect email or password."
         )
 
     if not user.is_active:
@@ -447,14 +448,24 @@ def logout_endpoint(current_user: User = Depends(require_auth_user), db: Session
     return {"message": "Logged out successfully."}
 
 @router.post("/refresh")
-def refresh_token_endpoint(refresh_token: str, db: Session = Depends(get_db)):
-    payload = decode_token(refresh_token)
-    if not payload or payload.get("type") != "refresh":
+def refresh_token_endpoint(
+    payload: Optional[TokenRefreshRequest] = None,
+    refresh_token: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    token_str = (payload.refresh_token if payload and payload.refresh_token else None) or refresh_token
+    if not token_str:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="refresh_token is required in request body or query parameter."
+        )
+    token_payload = decode_token(token_str)
+    if not token_payload or token_payload.get("type") != "refresh":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token."
         )
-    user_id = payload.get("sub")
+    user_id = token_payload.get("sub")
     user = db.query(User).filter(User.id == user_id).first()
     if not user or not user.is_active:
         raise HTTPException(
@@ -462,8 +473,20 @@ def refresh_token_endpoint(refresh_token: str, db: Session = Depends(get_db)):
             detail="User not found or inactive."
         )
 
-    new_access_token = create_access_token({"sub": user.id, "role": user.role, "email": user.email, "username": user.username})
-    return {"access_token": new_access_token, "token_type": "bearer"}
+    new_access_token = create_access_token({
+        "sub": user.id,
+        "role": user.role,
+        "email": user.email,
+        "username": user.username or user.email.split("@")[0],
+        "full_name": user.full_name
+    })
+    new_refresh_token = create_refresh_token({"sub": user.id})
+    return {
+        "access_token": new_access_token,
+        "refresh_token": new_refresh_token,
+        "token_type": "bearer",
+        "user": user
+    }
 
 @router.post("/password/check-strength")
 def check_strength_endpoint(password: str):

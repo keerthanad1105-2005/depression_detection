@@ -235,6 +235,12 @@ async function checkGoogleOAuthCallback() {
 function initAuthClient() {
     checkGoogleOAuthCallback();
 
+    const redirectReason = sessionStorage.getItem("auth_redirect_reason");
+    if (redirectReason) {
+        sessionStorage.removeItem("auth_redirect_reason");
+        showAlert("authAlert", redirectReason, "error");
+    }
+
     // 1. Password Toggles
     setupPasswordToggle("togglePasswordBtn", "loginPassword");
     setupPasswordToggle("toggleRegPasswordBtn", "regPassword");
@@ -305,7 +311,7 @@ function initAuthClient() {
                     spinner.style.display = "none";
 
                     if (response.status === 401) {
-                        showAlert("authAlert", "Wrong username or password.", "error");
+                        showAlert("authAlert", "Incorrect email or password.", "error");
                     } else if (response.status === 429) {
                         showAlert("authAlert", data.detail || "Too many failed attempts. Please try again later.", "error");
                     } else {

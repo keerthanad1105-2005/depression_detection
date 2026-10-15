@@ -18,6 +18,96 @@ const API_URL = isLocalhost
     : (PROD_BACKEND_URL || window.location.origin);
 
 /*=====================================================
+            AUTHENTICATED FETCH WITH SILENT REFRESH
+======================================================*/
+let isRefreshingToken = false;
+let refreshSubscribers = [];
+
+function onTokenRefreshed(newToken) {
+    refreshSubscribers.forEach(cb => cb(newToken));
+    refreshSubscribers = [];
+}
+
+async function authFetch(url, options = {}, isRetry = false) {
+    let token = localStorage.getItem("access_token");
+    let opts = { ...options };
+    opts.headers = { ...(opts.headers || {}) };
+
+    if (token && token !== "dev_session_token" && !opts.headers["Authorization"]) {
+        opts.headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    let response;
+    try {
+        response = await fetch(url, opts);
+    } catch (netErr) {
+        throw netErr;
+    }
+
+    if (response.status === 401 && !isRetry && token && token !== "dev_session_token") {
+        const refreshToken = localStorage.getItem("refresh_token");
+        if (refreshToken) {
+            if (!isRefreshingToken) {
+                isRefreshingToken = true;
+                try {
+                    const refreshResp = await fetch(`${API_URL}/api/v1/auth/refresh`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ refresh_token: refreshToken })
+                    });
+                    if (refreshResp.ok) {
+                        const refreshData = await refreshResp.json();
+                        if (refreshData.access_token) {
+                            localStorage.setItem("access_token", refreshData.access_token);
+                            if (refreshData.refresh_token) {
+                                localStorage.setItem("refresh_token", refreshData.refresh_token);
+                            }
+                            if (refreshData.user) {
+                                localStorage.setItem("user_id", refreshData.user.id);
+                                localStorage.setItem("username", refreshData.user.username);
+                                localStorage.setItem("full_name", refreshData.user.full_name);
+                                localStorage.setItem("email", refreshData.user.email);
+                                localStorage.setItem("role", refreshData.user.role);
+                                updateRoleUI(refreshData.user);
+                            }
+                            isRefreshingToken = false;
+                            onTokenRefreshed(refreshData.access_token);
+                            opts.headers["Authorization"] = `Bearer ${refreshData.access_token}`;
+                            return await fetch(url, opts);
+                        }
+                    }
+                } catch (rErr) {
+                    console.warn("Silent refresh attempt failed:", rErr);
+                } finally {
+                    isRefreshingToken = false;
+                }
+            } else {
+                return new Promise(resolve => {
+                    refreshSubscribers.push(async (newToken) => {
+                        opts.headers["Authorization"] = `Bearer ${newToken}`;
+                        resolve(await fetch(url, opts));
+                    });
+                });
+            }
+        }
+
+        // Silent refresh failed or unavailable: save draft and redirect to login
+        if (typeof saveAnalysisDraft === "function") {
+            try { saveAnalysisDraft("session_expired"); } catch (_) {}
+        }
+        sessionStorage.setItem("auth_redirect_reason", "Session expired, please sign in again.");
+        localStorage.removeItem("access_token");
+        showToast("Session expired, please sign in again.", "warning");
+        setTimeout(() => {
+            window.location.replace("login.html");
+        }, 1200);
+    }
+
+    return response;
+}
+window.authFetch = authFetch;
+
+/*=====================================================
                 GLOBAL VARIABLES
 ======================================================*/
 let latestResult = null;
@@ -47,12 +137,12 @@ function showToast(message,type="success"){
 
 }
 /*=====================================================
-                SECTION NAVIGATION
+                SECTION NAVIGATION & SPA ROUTING
 =====================================================*/
-function showSection(sectionId){
+function showSection(sectionId, updateHash = true){
     // Redirect retired statistics dashboard route directly to Home
     if (sectionId === "statisticsSection" || sectionId === "statistics") {
-        showSection("homeSection");
+        showSection("homeSection", updateHash);
         return;
     }
 
@@ -68,6 +158,20 @@ function showSection(sectionId){
         const el = document.getElementById(id);
         if (el) el.style.display="none";
     });
+
+    if (updateHash) {
+        const hashMap = {
+            "homeSection": "home",
+            "analysisSection": "analysis",
+            "historySection": "history",
+            "clinicianSection": "clinician",
+            "adminSection": "admin"
+        };
+        const hashTarget = hashMap[sectionId] || "home";
+        if (window.location.hash !== "#" + hashTarget) {
+            history.replaceState(null, "", "#" + hashTarget);
+        }
+    }
 
     if(sectionId==="homeSection"){
         loadHistory();
@@ -85,7 +189,7 @@ function showSection(sectionId){
         const currentRole = localStorage.getItem("role") || "User";
         if (currentRole !== "Clinician" && currentRole !== "Admin") {
             showToast("Access Denied: Clinician or Administrator role required.", "error");
-            showSection("homeSection");
+            showSection("homeSection", updateHash);
             return;
         }
         const el = document.getElementById(sectionId);
@@ -98,7 +202,7 @@ function showSection(sectionId){
         const currentRole = localStorage.getItem("role") || "User";
         if (currentRole !== "Admin") {
             showToast("Access Denied: Administrator role required.", "error");
-            showSection("homeSection");
+            showSection("homeSection", updateHash);
             return;
         }
         const el = document.getElementById(sectionId);
@@ -110,6 +214,26 @@ function showSection(sectionId){
     const targetEl = document.getElementById(sectionId);
     if (targetEl) targetEl.style.display="block";
 }
+
+function syncSectionFromUrl() {
+    const hash = (window.location.hash || "").toLowerCase().replace("#", "").trim();
+    const path = (window.location.pathname || "").toLowerCase().split("/").pop().replace(".html", "").trim();
+    const initParams = new URLSearchParams(window.location.search);
+    const target = initParams.get("section") || hash || path;
+
+    if (target === "analysis" || target === "analysissection") {
+        showSection("analysisSection", false);
+    } else if (target === "history" || target === "historysection") {
+        showSection("historySection", false);
+    } else if (target === "clinician" || target === "cliniciansection") {
+        showSection("clinicianSection", false);
+    } else if (target === "admin" || target === "adminsection") {
+        showSection("adminSection", false);
+    } else {
+        showSection("homeSection", false);
+    }
+}
+window.addEventListener("hashchange", syncSectionFromUrl);
 
 /*=====================================================
                 DARK MODE
@@ -1027,22 +1151,11 @@ document.addEventListener("DOMContentLoaded", function () {
     initAutosaveListeners();
 
     loadTheme();
-    const targetSection = initParams.get("section");
-    if (targetSection === "admin") {
-        showSection("adminSection");
-    } else if (targetSection === "clinician") {
-        showSection("clinicianSection");
-    } else if (targetSection === "analysis") {
-        showSection("analysisSection");
-    } else if (targetSection === "history") {
-        showSection("historySection");
-    } else if (targetSection === "statistics" || targetSection === "statisticsSection") {
-        showSection("homeSection");
-    } else {
-        showSection("homeSection");
-    }
+    syncSectionFromUrl();
     loadHistory();
-    loadAdminDashboard();
+    if (role === "Admin") {
+        loadAdminDashboard();
+    }
     checkUnfinishedAnalysisDraft();
 
     document.getElementById("analyzeBtn")
@@ -1171,19 +1284,12 @@ async function analyzeMentalHealth(){
     if (trendResultCard) trendResultCard.style.display = "none";
 
     try{
-        const token = localStorage.getItem("access_token");
-        const headers = (token && token !== "dev_session_token") ? { "Authorization": `Bearer ${token}` } : {};
-
-        const response = await fetch(API_URL + "/analyze", {
+        const response = await authFetch(API_URL + "/analyze", {
             method: "POST",
-            headers,
             body: formData
         });
 
-        if (response.status === 401) {
-            saveAnalysisDraft("mid_session_expiry");
-            showToast("Your session has expired. Your progress has been saved. Please sign in again.", "warning");
-            setTimeout(() => { window.location.href = "login.html"; }, 2000);
+        if (!response || response.status === 401) {
             return;
         }
 
@@ -1532,14 +1638,9 @@ async function loadHistory() {
     if (tbody) tbody.innerHTML = "";
 
     try {
-        const token = localStorage.getItem("access_token");
-        const headers = (token && token !== "dev_session_token") ? { "Authorization": `Bearer ${token}` } : (token ? { "Authorization": `Bearer ${token}` } : {});
+        const response = await authFetch(API_URL + "/history");
 
-        const response = await fetch(API_URL + "/history", { headers });
-
-        if (response.status === 401) {
-            console.warn("Unauthenticated history access - redirecting to login");
-            window.location.href = "login.html";
+        if (!response || response.status === 401) {
             return;
         }
 
@@ -1846,12 +1947,8 @@ async function deleteHistory(id) {
     if (!ok) return;
 
     try {
-        const token = localStorage.getItem("access_token");
-        const headers = (token && token !== "dev_session_token") ? { "Authorization": `Bearer ${token}` } : (token ? { "Authorization": `Bearer ${token}` } : {});
-
-        const res = await fetch(API_URL + "/history/" + id, {
-            method: "DELETE",
-            headers
+        const res = await authFetch(API_URL + "/history/" + id, {
+            method: "DELETE"
         });
 
         if (!res.ok) {
@@ -2126,12 +2223,8 @@ async function executeDeleteAllData() {
     }
 
     try {
-        const token = localStorage.getItem("access_token");
-        const headers = (token && token !== "dev_session_token") ? { "Authorization": `Bearer ${token}` } : (token ? { "Authorization": `Bearer ${token}` } : {});
-
-        const res = await fetch(API_URL + "/history/all", {
-            method: "DELETE",
-            headers
+        const res = await authFetch(API_URL + "/history/all", {
+            method: "DELETE"
         });
 
         if (!res.ok) {
@@ -2789,8 +2882,8 @@ function initAutosaveListeners() {
 ======================================================*/
 function updateRoleUI(userProfile) {
     if (!userProfile) return;
-    const role = userProfile.role || "User";
-    const fullName = userProfile.full_name || userProfile.name || "User";
+    const role = userProfile.role || localStorage.getItem("role") || "User";
+    const fullName = userProfile.full_name || userProfile.name || localStorage.getItem("full_name") || localStorage.getItem("username") || "User";
     const roleLower = role.toLowerCase();
 
     // 1. Update Navbar User Chip & Colored Role Badge (User=gray, Clinician=teal, Admin=blue)
@@ -2805,13 +2898,19 @@ function updateRoleUI(userProfile) {
         `;
     }
 
-    // 2. Control Admin Dashboard Card on Home (Admins only, completely hidden for others)
+    // 2. Update Home Greeting Hero
+    const homeGreeting = document.getElementById("homeUserGreeting");
+    if (homeGreeting) {
+        homeGreeting.textContent = fullName;
+    }
+
+    // 3. Control Admin Dashboard Card on Home (Admins only, completely hidden for others)
     const adminHomeCard = document.getElementById("adminHomeCard");
     if (adminHomeCard) {
         adminHomeCard.style.display = (role === "Admin") ? "block" : "none";
     }
 
-    // 3. Control Clinician Portal Card on Home (Clinicians and Admins only, hidden for regular Users)
+    // 4. Control Clinician Portal Card on Home (Clinicians and Admins only, hidden for regular Users)
     const clinicianHomeCard = document.getElementById("clinicianHomeCard");
     if (clinicianHomeCard) {
         clinicianHomeCard.style.display = (role === "Clinician" || role === "Admin") ? "block" : "none";
@@ -2830,15 +2929,11 @@ async function refreshUserProfileFromBackend() {
     if (token === "dev_session_token") return;
 
     try {
-        let resp = await fetch(`${API_URL}/auth/me`, {
-            headers: { "Authorization": `Bearer ${token}` }
-        });
-        if (!resp.ok) {
-            resp = await fetch(`${API_URL}/api/v1/auth/me`, {
-                headers: { "Authorization": `Bearer ${token}` }
-            });
+        let resp = await authFetch(`${API_URL}/auth/me`);
+        if (!resp || !resp.ok) {
+            resp = await authFetch(`${API_URL}/api/v1/auth/me`);
         }
-        if (resp.ok) {
+        if (resp && resp.ok) {
             const data = await resp.json();
             localStorage.setItem("user_id", data.id);
             localStorage.setItem("username", data.username);
@@ -2846,9 +2941,6 @@ async function refreshUserProfileFromBackend() {
             localStorage.setItem("email", data.email);
             localStorage.setItem("role", data.role);
             updateRoleUI(data);
-        } else if (resp.status === 401) {
-            localStorage.clear();
-            window.location.replace("login.html");
         }
     } catch (err) {
         console.warn("Could not query /auth/me on page load:", err);
@@ -2874,9 +2966,7 @@ async function loadClinicianPortal() {
     }
 
     try {
-        const token = localStorage.getItem("access_token");
-        const headers = token ? { "Authorization": `Bearer ${token}` } : {};
-        const res = await fetch(`${API_URL}/api/v1/clinician/patients`, { headers });
+        const res = await authFetch(`${API_URL}/api/v1/clinician/patients`);
         if (!res.ok) {
             if (res.status === 403) {
                 showToast("Access Denied: Clinician role required on backend (403).", "error");
@@ -2974,11 +3064,8 @@ async function loadAdminDashboard() {
     }
 
     try {
-        const token = localStorage.getItem("access_token");
-        const headers = token ? { "Authorization": `Bearer ${token}` } : {};
-
         // 1. Fetch comprehensive dashboard stats
-        const response = await fetch(`${API_URL}/api/v1/admin/dashboard-stats?include_test_data=${adminIncludeTestData}`, { headers });
+        const response = await authFetch(`${API_URL}/api/v1/admin/dashboard-stats?include_test_data=${adminIncludeTestData}`);
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: Failed to load admin dashboard`);
         }
@@ -3036,9 +3123,7 @@ async function loadAdminDashboard() {
 
 async function loadAdminSystemHealth() {
     try {
-        const token = localStorage.getItem("access_token");
-        const headers = token ? { "Authorization": `Bearer ${token}` } : {};
-        const res = await fetch(`${API_URL}/api/v1/admin/health`, { headers });
+        const res = await authFetch(`${API_URL}/api/v1/admin/health`);
         if (!res.ok) return;
         const h = await res.json();
 
@@ -3473,9 +3558,7 @@ async function markAlertReviewed(alertId, btnEl) {
 
 async function loadAdminUsersTable() {
     try {
-        const token = localStorage.getItem("access_token");
-        const headers = token ? { "Authorization": `Bearer ${token}` } : {};
-        const res = await fetch(`${API_URL}/api/v1/admin/users`, { headers });
+        const res = await authFetch(`${API_URL}/api/v1/admin/users`);
         if (!res.ok) return;
         allAdminUsersData = await res.json();
         renderFilteredUsersTable(allAdminUsersData);
@@ -3588,11 +3671,8 @@ function filterAndDisplayUsers(query, role) {
 
 async function approveClinicianRequest(userId) {
     try {
-        const token = localStorage.getItem("access_token");
-        const headers = token ? { "Authorization": `Bearer ${token}` } : {};
-        const res = await fetch(`${API_URL}/api/v1/admin/users/${userId}/approve-clinician`, {
-            method: "POST",
-            headers: headers
+        const res = await authFetch(`${API_URL}/api/v1/admin/users/${userId}/approve-clinician`, {
+            method: "POST"
         });
         const data = await res.json();
         if (!res.ok) {
@@ -3610,11 +3690,8 @@ window.approveClinicianRequest = approveClinicianRequest;
 
 async function rejectClinicianRequest(userId) {
     try {
-        const token = localStorage.getItem("access_token");
-        const headers = token ? { "Authorization": `Bearer ${token}` } : {};
-        const res = await fetch(`${API_URL}/api/v1/admin/users/${userId}/reject-clinician`, {
-            method: "POST",
-            headers: headers
+        const res = await authFetch(`${API_URL}/api/v1/admin/users/${userId}/reject-clinician`, {
+            method: "POST"
         });
         const data = await res.json();
         if (!res.ok) {
@@ -3639,14 +3716,9 @@ async function changeUserRole(userId, newRole) {
     }
 
     try {
-        const token = localStorage.getItem("access_token");
-        const headers = {
-            "Content-Type": "application/json",
-            ...(token ? { "Authorization": `Bearer ${token}` } : {})
-        };
-        const res = await fetch(`${API_URL}/api/v1/admin/users/${userId}/change-role`, {
+        const res = await authFetch(`${API_URL}/api/v1/admin/users/${userId}/change-role`, {
             method: "POST",
-            headers: headers,
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ role: newRole })
         });
         const data = await res.json();
@@ -3671,11 +3743,8 @@ async function toggleUserActive(userId) {
     }
 
     try {
-        const token = localStorage.getItem("access_token");
-        const headers = token ? { "Authorization": `Bearer ${token}` } : {};
-        const res = await fetch(`${API_URL}/api/v1/admin/users/${userId}/toggle-active`, {
-            method: "POST",
-            headers: headers
+        const res = await authFetch(`${API_URL}/api/v1/admin/users/${userId}/toggle-active`, {
+            method: "POST"
         });
         const data = await res.json();
         if (!res.ok) {
@@ -3693,9 +3762,7 @@ async function toggleUserActive(userId) {
 
 async function loadAdminAuditLogsTable() {
     try {
-        const token = localStorage.getItem("access_token");
-        const headers = token ? { "Authorization": `Bearer ${token}` } : {};
-        const res = await fetch(`${API_URL}/api/v1/admin/audit-logs?limit=50`, { headers });
+        const res = await authFetch(`${API_URL}/api/v1/admin/audit-logs?limit=50`);
         if (!res.ok) return;
         allAdminAuditLogsData = await res.json();
         renderFilteredAuditTable(allAdminAuditLogsData);
@@ -3745,9 +3812,7 @@ function exportAuditLogsCsv() {
 
 async function openAdminPatientReport(recordId) {
     try {
-        const token = localStorage.getItem("access_token");
-        const headers = token ? { "Authorization": `Bearer ${token}` } : {};
-        const res = await fetch(`${API_URL}/api/v1/admin/patient-report/${recordId}`, { headers });
+        const res = await authFetch(`${API_URL}/api/v1/admin/patient-report/${recordId}`);
         if (!res.ok) throw new Error("Could not retrieve patient record.");
         const rec = await res.json();
 

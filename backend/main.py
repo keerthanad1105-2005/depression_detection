@@ -109,18 +109,38 @@ async def rate_limiting_middleware(request: Request, call_next):
 # -----------------------------------------------------------------------------
 # Production CORS Setup
 # -----------------------------------------------------------------------------
-cors_origins = [o for o in settings.CORS_ORIGINS if o]
-if settings.ENVIRONMENT == "production" and "*" in cors_origins:
-    cors_origins = [o for o in cors_origins if o != "*"]
-if settings.FRONTEND_URL and settings.FRONTEND_URL not in cors_origins:
-    cors_origins.append(settings.FRONTEND_URL)
+default_origins = [
+    "https://mindscan-frontend.onrender.com",
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://localhost:8000",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:8000"
+]
+
+cors_origins_set = set(default_origins)
+if isinstance(settings.CORS_ORIGINS, list):
+    for o in settings.CORS_ORIGINS:
+        if o and o != "*":
+            cors_origins_set.add(o.rstrip("/"))
+elif isinstance(settings.CORS_ORIGINS, str):
+    for o in settings.CORS_ORIGINS.split(","):
+        o_clean = o.strip()
+        if o_clean and o_clean != "*":
+            cors_origins_set.add(o_clean.rstrip("/"))
+
+if settings.FRONTEND_URL:
+    cors_origins_set.add(settings.FRONTEND_URL.rstrip("/"))
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins if cors_origins else ["*"],
+    allow_origins=list(cors_origins_set),
+    allow_origin_regex=r"^https:\/\/.*\.onrender\.com$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 # -----------------------------------------------------------------------------
@@ -730,6 +750,7 @@ async def legacy_analyze(
     user_email = current_user.email if current_user else None
     analysis_type = " + ".join(modalities_used) if modalities_used else "Single Modality"
 
+    saved_hist_id = None
     try:
         # 1. Primary persistence using SQLAlchemy HistoryRecord (PostgreSQL & SQLite)
         db_sql = SessionLocal()
@@ -757,6 +778,8 @@ async def legacy_analyze(
                 (AnalysisDraft.user_id == resolved_name) | (AnalysisDraft.user_id == "anonymous")
             ).delete()
             db_sql.commit()
+            db_sql.refresh(hist_entry)
+            saved_hist_id = hist_entry.id
         except Exception as e:
             logger.error(f"[History Save] HistoryRecord save error: {e}")
             db_sql.rollback()
@@ -791,10 +814,13 @@ async def legacy_analyze(
                     )
                 )
                 conn.commit()
+                if not saved_hist_id and cursor.lastrowid:
+                    saved_hist_id = cursor.lastrowid
             except Exception:
                 pass
 
         return {
+            "id": saved_hist_id,
             "text_score": round(text_score * 100.0, 2) if text_score is not None else None,
             "face_emotion": face_emotion,
             "voice_emotion": voice_emotion,
