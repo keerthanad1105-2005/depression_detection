@@ -1,0 +1,71 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: mindscan_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mindscan
+      POSTGRES_USER: mindscan
+      POSTGRES_PASSWORD: mindscan_secure_password_2026
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mindscan -d mindscan"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mindscan_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=False
+      - DATABASE_URL=postgresql://mindscan:mindscan_secure_password_2026@db:5432/mindscan
+      - SECRET_KEY=mindscan-production-super-secret-key-at-least-32-bytes!
+      - ADMIN_REGISTRATION_CODE=AdminSecretCode2026!
+      - CLINICIAN_REGISTRATION_CODE=ClinicianAccessCode2026!
+      - FRONTEND_URL=http://localhost:3000
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:80,http://127.0.0.1:3000,http://localhost:8000
+      - WEB_CONCURRENCY=1
+      - LOG_LEVEL=INFO
+      - SECURE_COOKIES=False
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads_data:/app/uploads
+      - reports_data:/app/reports
+      - models_data:/app/models
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: mindscan_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+volumes:
+  postgres_data:
+  uploads_data:
+  reports_data:
+  models_data:

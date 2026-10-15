@@ -1,0 +1,51 @@
+# Git & Version Control
+.git/
+.gitignore
+
+# Environments & Dependencies
+venv/
+env/
+.venv/
+node_modules/
+
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+
+# Local SQLite Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Python Bytecode & Cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Test audio samples & test data
+test_*.wav
+*.wav
+*.mp4
+*.avi
+scratch_*.py
+tests_e2e_journey.py
+test_new_register_and_google.py
+capture_user_flow_screenshots.py
+*.png
+
+# Dynamic uploads and generated reports
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/reports/*
+!backend/reports/.gitkeep
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store

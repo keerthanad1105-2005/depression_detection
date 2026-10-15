@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multimodal Depression Detection - Register</title>
+    <link rel="stylesheet" href="login.css?v=reg_v2">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        // Redirect to dashboard if user is already logged in
+        if (localStorage.getItem("access_token")) {
+            window.location.replace("index.html");
+        }
+    </script>
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-card">
+            <!-- Brand Header matching exact design -->
+            <div class="brand-header">
+                <div class="brain-icon">🧠</div>
+                <h1 class="brand-title">Multimodal Depression<br>Detection</h1>
+                <p class="brand-subtitle">Create an Account</p>
+            </div>
+
+            <!-- Error / Success Alert Notification -->
+            <div id="authAlert" class="auth-alert" style="display:none;"></div>
+
+            <!-- Registration Form -->
+            <form id="registerForm" onsubmit="return false;" novalidate>
+                <!-- 1. Full Name Field -->
+                <div class="form-group">
+                    <div class="input-wrapper">
+                        <input
+                            type="text"
+                            id="regFullName"
+                            name="name"
+                            class="input-field"
+                            placeholder="Full Name"
+                            autocomplete="name"
+                            required>
+                    </div>
+                    <div id="valFullName" class="field-validation-msg" style="display:none;"></div>
+                </div>
+
+                <!-- 2. Email Field (Email IS the username) -->
+                <div class="form-group">
+                    <div class="input-wrapper">
+                        <input
+                            type="email"
+                            id="regEmail"
+                            name="email"
+                            class="input-field"
+                            placeholder="Email Address"
+                            autocomplete="email"
+                            required>
+                    </div>
+                    <div id="valEmail" class="field-validation-msg" style="display:none;"></div>
+                </div>
+
+                <!-- 3. Account Role Selection Field -->
+                <div class="form-group">
+                    <label for="regRole" class="form-label" style="display:block; text-align:left; font-size:13px; font-weight:600; color:#475569; margin-bottom:6px;">
+                        Account Role
+                    </label>
+                    <div class="input-wrapper">
+                        <select id="regRole" name="role" class="input-field select-role-field" required>
+                            <option value="User" selected>User (Self-Assessment &amp; Screening)</option>
+                            <option value="Clinician">Clinician (Professional Review)</option>
+                            <option value="Admin">Administrator (System Management)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- 3b. Role Access Code Field (Dynamic: for Clinician or Admin) -->
+                <div id="roleCodeGroup" class="form-group" style="display:none;">
+                    <label id="roleCodeLabel" for="regAccessCode" class="form-label" style="display:block; text-align:left; font-size:13px; font-weight:600; color:#475569; margin-bottom:6px;">
+                        Access Code
+                    </label>
+                    <div class="input-wrapper">
+                        <input
+                            type="password"
+                            id="regAccessCode"
+                            name="access_code"
+                            class="input-field"
+                            placeholder="Enter access code"
+                            autocomplete="off">
+                    </div>
+                    <div id="valAccessCode" class="field-validation-msg" style="display:none;"></div>
+                    <!-- Clinician Admin Approval Notice Note -->
+                    <div id="clinicianNotice" class="role-notice-box" style="display:none; margin-top:8px; font-size:12.5px; color:#92400e; background:#fef3c7; border:1px solid #fde68a; border-radius:10px; padding:10px 14px; text-align:left; line-height:1.45;">
+                        <span>ℹ️</span> <span>Clinician access needs admin approval.</span>
+                    </div>
+                    <!-- Admin Notice Note -->
+                    <div id="adminNotice" class="role-notice-box" style="display:none; margin-top:8px; font-size:12.5px; color:#1e3a8a; background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:10px 14px; text-align:left; line-height:1.45;">
+                        <span>🔒</span> <span>A valid admin registration code from the server environment is strictly required.</span>
+                    </div>
+                </div>
+
+                <!-- 4. Password Field with Show/Hide Toggle & Strength Meter -->
+                <div class="form-group">
+                    <div class="input-wrapper has-toggle">
+                        <input
+                            type="password"
+                            id="regPassword"
+                            name="new-password"
+                            class="input-field"
+                            placeholder="Password (min. 8 characters)"
+                            autocomplete="new-password"
+                            required>
+                        <button
+                            type="button"
+                            id="toggleRegPasswordBtn"
+                            class="password-toggle-btn"
+                            onclick="togglePasswordVisibility('regPassword', this)"
+                            title="Show password"
+                            aria-label="Show password">
+                            <svg class="eye-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <!-- Live Dynamic Strength Meter -->
+                    <div class="strength-meter-box">
+                        <div class="strength-bar-track">
+                            <div id="strengthBarFill" class="strength-bar-fill"></div>
+                        </div>
+                        <span id="strengthLabel" class="strength-label-text">Password strength: at least 8 characters</span>
+                    </div>
+                    <div id="valPassword" class="field-validation-msg" style="display:none;"></div>
+                </div>
+
+                <!-- 5. Confirm Password Field with Show/Hide Toggle -->
+                <div class="form-group">
+                    <div class="input-wrapper has-toggle">
+                        <input
+                            type="password"
+                            id="regConfirmPassword"
+                            name="new-password"
+                            class="input-field"
+                            placeholder="Confirm Password"
+                            autocomplete="new-password"
+                            required>
+                        <button
+                            type="button"
+                            id="toggleRegConfirmBtn"
+                            class="password-toggle-btn"
+                            onclick="togglePasswordVisibility('regConfirmPassword', this)"
+                            title="Show password"
+                            aria-label="Show password">
+                            <svg class="eye-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div id="valConfirmPassword" class="field-validation-msg" style="display:none;"></div>
+                </div>
+
+                <!-- Register Button (Disabled until form is valid) with Loading State -->
+                <button type="submit" id="submitRegisterBtn" class="primary-btn" disabled style="margin-top:8px;">
+                    <span id="regSpinner" class="spinner" style="display:none;"></span>
+                    <span id="regBtnText">Register</span>
+                </button>
+
+                <!-- Bottom Link Back to Login -->
+                <p class="bottom-prompt">
+                    Already have an account? <a href="login.html" id="loginLink">Login</a>
+                </p>
+            </form>
+        </div>
+    </div>
+
+    <script src="login.js?v=reg_v3"></script>
+</body>
+</html>

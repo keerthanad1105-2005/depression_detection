@@ -1,0 +1,1532 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Multimodal Depression Detection</title>
+
+    <link rel="stylesheet" href="style.css?v=multi_v1">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Noto+Sans:ital,wght@0,300..700;1,300..700&family=Noto+Sans+Devanagari:wght@400;600;700&family=Noto+Sans+Tamil:wght@400;600;700&family=Noto+Sans+Kannada:wght@400;600;700&family=Noto+Sans+Telugu:wght@400;600;700&family=Noto+Sans+Malayalam:wght@400;600;700&family=Noto+Sans+Bengali:wght@400;600;700&family=Noto+Sans+Gujarati:wght@400;600;700&family=Noto+Sans+Gurmukhi:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <script>
+        // Protected Route Guard: If not logged in, immediately redirect to login.html
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get("dev") === "true") {
+            localStorage.setItem("access_token", "dev-test-token");
+            localStorage.setItem("username", "Jane Doe");
+        }
+        if (!localStorage.getItem("access_token")) {
+            window.location.replace("login.html");
+        }
+    </script>
+</head>
+
+
+<body>
+
+<!-- ========================= -->
+<!-- NAVBAR -->
+<!-- ========================= -->
+
+<nav class="navbar">
+
+    <div class="logo">
+
+        🧠 Depression Detection
+
+    </div>
+
+    <div class="nav-right">
+        <button
+            class="nav-btn"
+            onclick="showSection('homeSection')"
+            aria-label="Navigate to Home">
+            <svg class="btn-icon-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:6px; vertical-align:text-bottom;"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home
+        </button>
+
+        <span id="welcome">
+            Welcome
+        </span>
+
+        <button
+            class="theme-toggle"
+            onclick="toggleTheme()"
+            aria-label="Toggle dark mode"
+            title="Toggle dark mode">
+            <svg id="themeIconSvg" class="theme-icon-svg" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+        </button>
+
+        <button id="logoutBtn" class="logout-btn">
+            Logout
+        </button>
+    </div>
+
+</nav>
+
+<!-- ========================= -->
+<!-- MAIN CONTAINER -->
+<!-- ========================= -->
+
+<div class="container">
+
+<!-- ========================= -->
+<!-- HOME -->
+<!-- ========================= -->
+
+<section id="homeSection">
+
+    <!-- USER GREETING & QUICK ACTION HERO -->
+    <div class="user-greeting-hero">
+        <div class="user-greeting-text">
+            <h1 class="user-greeting-title">Welcome back, <span id="homeUserGreeting">User</span> 👋</h1>
+            <p class="user-greeting-subtitle">Confidential multimodal depression screening and longitudinal wellness monitoring.</p>
+        </div>
+        <div class="user-greeting-actions">
+            <button id="homeStartNewAnalysisBtn" class="primary-btn hero-cta-btn" onclick="showSection('analysisSection')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:8px; vertical-align:text-bottom;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                Start New Analysis
+            </button>
+        </div>
+    </div>
+
+    <!-- LATEST RESULT CARD -->
+    <div id="homeLatestResultCard" class="home-latest-card">
+        <!-- Rendered dynamically by renderHomeDashboard() -->
+    </div>
+
+    <!-- MY TREND (HOME) -->
+    <div id="myTrendHomeCard" class="my-trend-card">
+        <div class="trend-header-row">
+            <div class="trend-title-block">
+                <h2>📈 My Depression Score Trend</h2>
+                <p>Your longitudinal mood score trajectory across recent screenings (last 10 scores)</p>
+            </div>
+            <div id="myTrendHomeBadge" class="trend-badge-change stable" style="display:none;">
+                <span id="myTrendHomeBadgeText">--</span>
+            </div>
+        </div>
+        <div id="myTrendHomeEmpty" class="trend-empty-state">
+            ℹ️ Do at least 2 analyses to see a trend
+        </div>
+        <div id="myTrendHomeWrapper" class="trend-chart-wrapper" style="display:none;">
+            <canvas id="myTrendHomeChart"></canvas>
+        </div>
+        <div id="myTrendHomeInsight" class="trend-insight-box" style="display:none;"></div>
+    </div>
+
+    <!-- RECENT ANALYSES & SUPPORT HELPLINES ROW -->
+    <div class="home-two-col-grid">
+        <!-- Recent Analyses List -->
+        <div class="home-widget-card">
+            <div class="widget-header">
+                <div>
+                    <h3 class="widget-title">Recent Analyses</h3>
+                    <p class="widget-subtitle">Your latest screening assessments</p>
+                </div>
+                <a href="#" class="widget-link" onclick="showSection('historySection'); return false;">View all &rarr;</a>
+            </div>
+            <div id="homeRecentAnalysesContainer" class="recent-list-container">
+                <!-- Rendered dynamically -->
+            </div>
+        </div>
+
+        <!-- Support Panel with Helplines -->
+        <div id="homeSupportPanel" class="home-widget-card support-panel-card">
+            <div class="widget-header">
+                <div>
+                    <h3 class="widget-title">Support &amp; Helplines</h3>
+                    <p class="widget-subtitle">Confidential, 24/7 mental health crisis assistance</p>
+                </div>
+                <span class="support-badge-pill">24/7 Available</span>
+            </div>
+            <div id="supportHighRiskAlert" class="support-alert-banner" style="display:none;">
+                <div class="support-alert-icon">⚠️</div>
+                <div style="font-size:13px; line-height:1.5;">
+                    <strong>Elevated Risk Support Notice:</strong> Your latest screening indicated high risk. Please consider speaking with a clinical professional or reaching out to the toll-free helplines below.
+                </div>
+            </div>
+            <div class="support-helpline-list">
+                <div class="helpline-item">
+                    <div class="helpline-icon">📞</div>
+                    <div class="helpline-info">
+                        <div class="helpline-name">Tele-MANAS (Govt. of India)</div>
+                        <div class="helpline-number"><a href="tel:14416">14416</a> <span class="helpline-alt">or 1800-891-4416</span></div>
+                        <div class="helpline-sub">Comprehensive, 24/7 tele-mental health counseling</div>
+                    </div>
+                </div>
+                <div class="helpline-item">
+                    <div class="helpline-icon">🤝</div>
+                    <div class="helpline-info">
+                        <div class="helpline-name">KIRAN Mental Health Helpline</div>
+                        <div class="helpline-number"><a href="tel:18005990019">1800-599-0019</a></div>
+                        <div class="helpline-sub">Toll-free 24/7 mental health rehabilitation</div>
+                    </div>
+                </div>
+                <div class="helpline-item">
+                    <div class="helpline-icon">💬</div>
+                    <div class="helpline-info">
+                        <div class="helpline-name">Vandrevala Foundation</div>
+                        <div class="helpline-number"><a href="tel:+919999666555">+91 9999 666 555</a></div>
+                        <div class="helpline-sub">Free 24/7 professional crisis counseling</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- QUICK PORTAL CARDS -->
+    <div class="home-grid" style="margin-top:25px;">
+
+        <div class="home-card"
+             onclick="showSection('analysisSection')">
+            <div class="icon">
+                🧠
+            </div>
+            <h2>
+                Depression Analysis
+            </h2>
+            <p>
+                Analyze depression using Text,
+                Face, and Voice.
+            </p>
+        </div>
+
+        <div class="home-card"
+             onclick="showSection('historySection')">
+            <div class="icon">
+                📜
+            </div>
+            <h2>
+                Analysis History
+            </h2>
+            <p>
+                Search, Filter,
+                Delete and Export records.
+            </p>
+        </div>
+
+        <div class="home-card" id="clinicianHomeCard"
+             onclick="showSection('clinicianSection')"
+             style="display:none;">
+            <div class="icon">
+                🩺
+            </div>
+            <h2>
+                Clinician Portal
+            </h2>
+            <p>
+                Patient triage queue, clinical notes & oversight.
+            </p>
+        </div>
+
+        <div class="home-card" id="adminHomeCard"
+             onclick="showSection('adminSection')"
+             style="display:none;">
+            <div class="icon">
+                👨‍💼
+            </div>
+            <h2>
+                Admin Dashboard
+            </h2>
+            <p>
+                System monitoring,
+                users and reports.
+            </p>
+        </div>
+
+    </div>
+
+</section>
+
+<!-- ========================= -->
+<!-- ANALYSIS -->
+<!-- ========================= -->
+
+<section
+id="analysisSection"
+style="display:none;">
+
+<h1 class="page-title">
+
+    🧠 Depression Analysis
+
+</h1>
+
+<div style="margin-bottom:20px;">
+    <button class="primary-btn" onclick="showSection('homeSection')" aria-label="Back to Home">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px; vertical-align:text-bottom;"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Back to Home
+    </button>
+</div>
+
+<!-- RESUME DRAFT BANNER -->
+<div id="resumeAnalysisBanner" class="resume-analysis-banner" style="display:none;">
+    <div class="resume-banner-content">
+        <div class="resume-banner-text">
+            <strong>📋 Continue your unfinished analysis?</strong>
+            <span>We saved your progress from an earlier session.</span>
+        </div>
+        <div class="resume-banner-actions">
+            <button type="button" class="btn-resume-continue" id="resumeContinueBtn" onclick="resumeUnfinishedAnalysis()">Continue</button>
+            <button type="button" class="btn-resume-startover" id="resumeStartOverBtn" onclick="discardDraftAndStartOver()">Start over</button>
+        </div>
+    </div>
+</div>
+
+<!-- AUTOSAVE FLOATING STATUS -->
+<div id="autosaveStatusBadge" class="autosave-status-badge" style="display:none;">
+    <span id="autosaveStatusIcon">✓</span>
+    <span id="autosaveStatusText">Saved</span>
+</div>
+
+<p class="page-subtitle">
+
+    Complete patient information
+    before starting the analysis.
+
+</p>
+
+<!-- Patient Information -->
+
+<div class="card">
+    <h2>Patient Information</h2>
+    <div class="patient-grid">
+        <div>
+            <label for="patientName">Full Name</label>
+            <input type="text" id="patientName" placeholder="e.g. Jane Doe">
+        </div>
+
+        <div>
+            <label for="patientDOB">Date of Birth <span style="color:#ef4444;">*</span></label>
+            <input type="date" id="patientDOB" required>
+            <div id="dobError" class="field-error-msg" style="display:none; color:#ef4444; font-size:12px; margin-top:4px;"></div>
+        </div>
+
+        <div>
+            <label for="patientAge">Calculated Age</label>
+            <input type="text" id="patientAge" readonly placeholder="Calculated automatically from DOB" style="background:var(--bg-muted, #f8fafc); cursor:not-allowed;">
+        </div>
+
+        <div>
+            <label for="patientGender">Gender</label>
+            <select id="patientGender">
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="patientOccupation">Occupation</label>
+            <input type="text" id="patientOccupation" placeholder="e.g. Software Engineer">
+        </div>
+
+        <div>
+            <label for="patientSymptoms">Symptoms</label>
+            <input type="text" id="patientSymptoms" placeholder="e.g. Fatigue, Low mood, Insomnia">
+        </div>
+
+        <div>
+            <label for="patientStarted">When Symptoms Started</label>
+            <input type="date" id="patientStarted">
+            <div id="startedError" class="field-error-msg" style="display:none; color:#ef4444; font-size:12px; margin-top:4px;"></div>
+        </div>
+
+        <div>
+            <label for="patientDuration">Duration</label>
+            <input type="text" id="patientDuration" readonly placeholder="Calculated from start date" style="background:var(--bg-muted, #f8fafc); cursor:not-allowed;">
+        </div>
+    </div>
+</div>
+
+<!-- PHQ-9 QUESTIONNAIRE CARD -->
+<div class="phq9-card" id="phq9Card">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;">
+        <div>
+            <h2 style="margin:0 0 4px 0;">📋 PHQ-9 Clinical Questionnaire</h2>
+            <p style="color:var(--text-muted, #64748b); font-size:13px; margin:0;">
+                Over the last 2 weeks, how often have you been bothered by any of the following problems?
+            </p>
+        </div>
+        <div class="phq9-score-chip">
+            Total Score: <span id="phq9TotalScore" style="color:#2563eb; margin:0 4px;">0</span> / 27
+            &bull; Severity: <span id="phq9SeverityBadge" style="margin-left:4px;">Minimal</span>
+        </div>
+    </div>
+    <div id="phq9CrisisAlert" class="phq9-crisis-banner" style="display:none;">
+        ⚠️ <strong>Immediate Support Available:</strong> If you or someone you know is struggling or in crisis, help is available. You are not alone. Please call or text <strong>988</strong> to reach the Suicide &amp; Crisis Lifeline, or seek urgent medical care.
+    </div>
+    <div id="phq9QuestionsList" style="margin-top:16px;"></div>
+</div>
+
+<!-- ========================= -->
+<!-- MULTIMODAL SCREENING SECTION -->
+<!-- ========================= -->
+
+<div id="textSection">
+
+    <!-- TEXT -->
+
+    <div class="card">
+
+        <h2>📝 Text Analysis</h2>
+
+        <textarea
+            id="text"
+            rows="6"
+            placeholder="Describe how you feel today..."></textarea>
+
+    </div>
+
+    <!-- FACE -->
+
+    <div class="card">
+
+        <h2>😊 Face Analysis (Photo Only)</h2>
+        <p style="color:var(--text-muted, #64748b); font-size:13px; margin-bottom:14px;">
+            Align your face in the oval guide using live camera or upload a clear photo (JPG/PNG).
+        </p>
+
+        <div class="camera-wrapper">
+            <video
+                id="video"
+                autoplay
+                playsinline
+                class="video-preview">
+            </video>
+            <div id="ovalGuide" class="oval-guide" style="display:none;">
+                <span class="guide-text">Align face inside the oval</span>
+            </div>
+        </div>
+
+        <canvas
+            id="canvas"
+            width="320"
+            height="240"
+            style="display:none;">
+        </canvas>
+
+        <img
+            id="capturedPreview"
+            style="
+                display:none;
+                width:220px;
+                margin:15px auto;
+                border-radius:12px;
+                border:2px solid #4F46E5;">
+
+        <div class="button-group">
+
+            <button
+                type="button"
+                onclick="startCamera()"
+                aria-label="Start Camera">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px; vertical-align:text-bottom;"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>Start Camera
+            </button>
+
+            <button
+                type="button"
+                onclick="captureImage()"
+                aria-label="Capture Photo">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px; vertical-align:text-bottom;"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>Capture Photo
+            </button>
+
+            <button
+                type="button"
+                onclick="retakeImage()"
+                aria-label="Retake Photo">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px; vertical-align:text-bottom;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>Retake
+            </button>
+
+        </div>
+
+        <p class="or-text">
+            OR
+        </p>
+
+        <input
+            type="file"
+            id="face"
+            accept="image/png, image/jpeg, image/jpg">
+
+    </div>
+
+    <!-- VOICE -->
+    <div class="card" id="voiceCard">
+        <h2>
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:8px; vertical-align:text-bottom;"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>Voice Analysis
+        </h2>
+        <p style="color:var(--text-muted, #64748b); font-size:13px; margin-bottom:18px;">
+            Record your voice live or upload a clear speech audio file.
+        </p>
+
+        <!-- Centered Max-Width (640px) Container -->
+        <div class="voice-step-container">
+
+            <!-- Prompt Card: Speak naturally in any language -->
+            <div class="voice-prompt-card">
+                <div class="voice-prompt-badge">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                    </svg>
+                    <span>Say this aloud</span>
+                </div>
+                <div class="voice-prompt-question">
+                    "Speak naturally in any language about how you have been feeling."
+                </div>
+                <div class="voice-prompt-meta">
+                    <span>Minimum: <strong>20s</strong></span>
+                    <span class="meta-dot">&bull;</span>
+                    <span>Recommended: <strong>30–60s</strong></span>
+                    <span class="meta-dot">&bull;</span>
+                    <span>Auto-stop at <strong>90s</strong></span>
+                </div>
+            </div>
+
+            <!-- Microphone Recorder Section -->
+            <div class="voice-recorder-section">
+                <!-- 96px Round Mic Button with Blue Gradient, White Flat Line SVG Icon & Deep Shadow -->
+                <div class="mic-button-row">
+                    <button
+                        type="button"
+                        id="micBtn"
+                        class="mic-circle-btn"
+                        aria-label="Start recording voice"
+                        title="Tap to start recording">
+                        <svg id="micIconSvg" width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                            <line x1="12" x2="12" y1="19" y2="22"/>
+                        </svg>
+                    </button>
+                    <div id="micStatusLabel" class="mic-status-label">Tap to start recording</div>
+                </div>
+
+                <!-- Active Recording HUD (Big Timer, Live Waveform Bars, Pulsing Ring, Quiet Warning) -->
+                <div id="recordingHud" class="recording-hud" style="display:none;">
+                    <div class="hud-top-bar">
+                        <div class="hud-live-tag">
+                            <span class="pulsing-record-dot" aria-hidden="true"></span>
+                            <span class="hud-status-text">RECORDING</span>
+                        </div>
+                        <div id="recordingTimer" class="hud-big-timer">00:00</div>
+                        <div id="recProgressText" class="hud-progress-hint">(minimum 20s required)</div>
+                    </div>
+                    <canvas id="waveformCanvas" width="600" height="80" class="waveform-canvas"></canvas>
+                    <div id="quietWarning" class="quiet-warning-box" style="display:none;">
+                        ⚠️ Too quiet, speak closer
+                    </div>
+                </div>
+
+                <!-- Post-Recording Actions & Playback (Audio Player, Re-record, Analyse Voice) -->
+                <div id="recordingActionsPanel" class="recording-actions-panel" style="display:none;">
+                    <div class="playback-header">
+                        <span class="playback-title">Recorded Voice Sample:</span>
+                    </div>
+                    <audio id="audioPlayback" controls style="width:100%; margin-top:8px; border-radius:8px;"></audio>
+                    <div class="voice-btn-group" style="margin-top:14px; display:flex; gap:12px; flex-wrap:wrap;">
+                        <button type="button" id="reRecordBtn" class="secondary-btn" style="flex:1;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px; vertical-align:text-bottom;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>Re-record
+                        </button>
+                        <button type="button" id="analyzeVoiceBtn" class="primary-btn" style="flex:1.2;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px; vertical-align:text-bottom;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>Analyse voice
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Mic Permission Error Banner -->
+                <div id="micErrorMsg" class="mic-error-banner" style="display:none;"></div>
+
+                <!-- Voice Result Card: Score, Band & 4 Small Indicator Bars -->
+                <div id="voiceIndicatorsCard" class="voice-indicators-card" style="display:none;">
+                    <div class="voice-result-header">
+                        <div class="voice-score-block">
+                            <div class="voice-score-display">
+                                <span class="voice-score-label">Voice Score:</span>
+                                <span id="indicatorVoiceScore" class="voice-score-val">Voice model not trained yet</span>
+                            </div>
+                            <div class="voice-band-display">
+                                <span class="voice-band-label">Risk Band:</span>
+                                <span id="indicatorVoiceBand" class="voice-band-val">Voice model not trained yet</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="voice-indicator-bars-grid">
+                        <div class="indicator-bar-item">
+                            <div class="indicator-bar-header">
+                                <span class="indicator-bar-title">Speech Rate</span>
+                                <span id="indicatorSpeechRate" class="indicator-bar-num">--</span>
+                            </div>
+                            <div class="indicator-bar-track">
+                                <div id="barSpeechRate" class="indicator-bar-fill" style="width:0%;"></div>
+                            </div>
+                        </div>
+                        <div class="indicator-bar-item">
+                            <div class="indicator-bar-header">
+                                <span class="indicator-bar-title">Pauses</span>
+                                <span id="indicatorPauseLength" class="indicator-bar-num">--</span>
+                            </div>
+                            <div class="indicator-bar-track">
+                                <div id="barPauses" class="indicator-bar-fill" style="width:0%;"></div>
+                            </div>
+                        </div>
+                        <div class="indicator-bar-item">
+                            <div class="indicator-bar-header">
+                                <span class="indicator-bar-title">Pitch Variability</span>
+                                <span id="indicatorPitchVar" class="indicator-bar-num">--</span>
+                            </div>
+                            <div class="indicator-bar-track">
+                                <div id="barPitch" class="indicator-bar-fill" style="width:0%;"></div>
+                            </div>
+                        </div>
+                        <div class="indicator-bar-item">
+                            <div class="indicator-bar-header">
+                                <span class="indicator-bar-title">Vocal Energy</span>
+                                <span id="indicatorEnergy" class="indicator-bar-num">--</span>
+                            </div>
+                            <div class="indicator-bar-track">
+                                <div id="barEnergy" class="indicator-bar-fill" style="width:0%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Privacy Opt-in Checkbox: Scoped, Left-aligned, Same line, 18px width, unchecked by default -->
+                <div class="opt-in-wrapper">
+                    <label class="opt-in-label" for="storeAudioOptIn">
+                        <input type="checkbox" id="storeAudioOptIn">
+                        <span>Allow anonymous audio storage for model refinement (unchecked: audio is permanently deleted immediately after analysis)</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- "OR" shown as a line on both sides of the word -->
+            <div class="or-divider">
+                <span class="or-divider-line"></span>
+                <span class="or-divider-text">OR</span>
+                <span class="or-divider-line"></span>
+            </div>
+
+            <!-- Upload Drop Zone (hidden native input, dashed drop zone, upload icon, formats, 20s minimum) -->
+            <div class="voice-upload-container">
+                <input
+                    type="file"
+                    id="voice"
+                    accept=".wav,.mp3,.m4a,.webm,.ogg,audio/*"
+                    style="display:none;">
+
+                <div id="voiceDropZone" class="voice-drop-zone" role="button" tabindex="0" aria-label="Upload audio file">
+                    <div id="dropZoneContent" class="drop-zone-content">
+                        <div class="upload-icon-circle">
+                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="17 8 12 3 7 8"/>
+                                <line x1="12" x2="12" y1="3" y2="15"/>
+                            </svg>
+                        </div>
+                        <div class="drop-zone-primary">
+                            <strong>Drag and drop an audio file</strong> or <span class="browse-link">browse</span>
+                        </div>
+                        <div class="drop-zone-secondary">
+                            WAV, MP3, M4A, WebM, OGG &bull; Minimum 20 seconds
+                        </div>
+                    </div>
+
+                    <!-- File Chosen State (File chip, details, remove button) -->
+                    <div id="fileSelectedDisplay" class="file-selected-display" style="display:none;">
+                        <div class="file-info-chip">
+                            <div class="file-icon-box">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M9 18V5l12-2v13"/>
+                                    <circle cx="6" cy="18" r="3"/>
+                                    <circle cx="18" cy="16" r="3"/>
+                                </svg>
+                            </div>
+                            <div class="file-meta-box">
+                                <span id="selectedFileName" class="selected-file-name">sample.wav</span>
+                                <span id="selectedFileSize" class="selected-file-size">3.2 MB</span>
+                            </div>
+                            <button type="button" id="removeFileBtn" class="remove-file-btn" aria-label="Remove audio file" title="Remove file">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="18" y1="6" x2="6" y2="18"/>
+                                    <line x1="6" y1="6" x2="18" y2="18"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="center">
+
+         <div class="button-group">
+
+    <button
+        id="analyzeBtn"
+        class="primary-btn">
+
+        Analyze Depression
+
+    </button>
+
+    <button
+        type="button"
+        onclick="resetForm()"
+        class="secondary-btn">
+
+        Reset Form
+
+    </button>
+
+</div>
+
+    </div>
+
+</div>
+
+
+<!-- ========================= -->
+<!-- LOADING -->
+<!-- ========================= -->
+
+<div
+    id="loading"
+    class="loading-area">
+
+    <div class="loader"></div>
+
+    <p>
+
+        AI is analyzing the patient's mental health...
+
+    </p>
+
+</div>
+
+<!-- ========================= -->
+<!-- RESULT -->
+<!-- ========================= -->
+
+<div id="result" class="result-card" style="display:none;"></div>
+
+<div id="reportActions"
+     style="display:none; text-align:center; margin-top:20px;">
+
+    <button
+        id="downloadBtn"
+        class="analyze-btn">
+
+        Download Report
+
+    </button>
+
+</div>
+
+<!-- MY TREND (RESULTS) -->
+<div id="myTrendResultCard" class="my-trend-card" style="display:none;">
+    <div class="trend-header-row">
+        <div class="trend-title-block">
+            <h2>📈 My Depression Score Trend</h2>
+            <p>Your longitudinal mood progression including this latest analysis</p>
+        </div>
+        <div id="myTrendResultBadge" class="trend-badge-change stable" style="display:none;">
+            <span id="myTrendResultBadgeText">--</span>
+        </div>
+    </div>
+    <div id="myTrendResultEmpty" class="trend-empty-state">
+        ℹ️ Do at least 2 analyses to see a trend
+    </div>
+    <div id="myTrendResultWrapper" class="trend-chart-wrapper" style="display:none;">
+        <canvas id="myTrendResultChart"></canvas>
+    </div>
+    <div id="myTrendResultInsight" class="trend-insight-box" style="display:none;"></div>
+</div>
+</section>
+
+<!-- ========================= -->
+<!-- HISTORY SECTION -->
+<!-- ========================= -->
+
+<section id="historySection" style="display:none;">
+
+    <div class="history-page-header">
+        <div>
+            <h1 class="page-title" style="margin-bottom:4px;">📜 My Screening History</h1>
+            <p style="color:var(--text-muted, #64748b); font-size:14px; margin:0 0 16px;">
+                Your confidential screening records. Search, filter, compare assessments, and export reports.
+            </p>
+        </div>
+        <div class="history-header-actions">
+            <button class="primary-btn" onclick="showSection('homeSection')" aria-label="Back to Home">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px; vertical-align:text-bottom;"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Back to Home
+            </button>
+        </div>
+    </div>
+
+    <div class="card history-main-card">
+
+        <!-- TOOLBAR & FILTERS -->
+        <div class="history-toolbar-row">
+            <div class="history-search-wrapper">
+                <svg class="search-icon-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input
+                    type="text"
+                    id="searchHistory"
+                    class="history-input-search"
+                    placeholder="Search by date, inputs, symptoms..."
+                    onkeyup="applyHistoryFiltersAndSort()">
+            </div>
+
+            <div class="history-filters-group">
+                <select id="historyRiskFilter" class="history-select" onchange="applyHistoryFiltersAndSort()">
+                    <option value="all">All Risk Bands</option>
+                    <option value="Low Depression">Low Depression</option>
+                    <option value="Moderate Depression">Moderate Depression</option>
+                    <option value="High Depression">High Depression</option>
+                </select>
+
+                <select id="historyDateFilter" class="history-select" onchange="applyHistoryFiltersAndSort()">
+                    <option value="all">All Time</option>
+                    <option value="today">Today</option>
+                    <option value="week">This Week</option>
+                    <option value="month">This Month</option>
+                </select>
+
+                <select id="historySortOrder" class="history-select" onchange="applyHistoryFiltersAndSort()">
+                    <option value="newest">Sort: Date (Newest first)</option>
+                    <option value="oldest">Sort: Date (Oldest first)</option>
+                </select>
+            </div>
+
+            <div class="history-action-buttons">
+                <button
+                    id="btnCompareAnalyses"
+                    class="secondary-btn"
+                    disabled
+                    onclick="openCompareModal()"
+                    title="Select any two analyses in the table below to compare">
+                    ⚖️ Compare (0/2)
+                </button>
+
+                <button
+                    id="exportExcelBtn"
+                    class="secondary-btn"
+                    onclick="exportHistoryExcel()"
+                    aria-label="Export to Excel">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px; vertical-align:text-bottom;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>Excel
+                </button>
+
+                <button
+                    id="exportPdfSummaryBtn"
+                    class="secondary-btn"
+                    onclick="exportHistoryPDFSummary()"
+                    aria-label="Export to PDF">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px; vertical-align:text-bottom;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>PDF
+                </button>
+
+                <button
+                    id="btnDeleteAllData"
+                    class="danger-btn-outline"
+                    onclick="openDeleteAllModal()"
+                    title="Permanently remove all your screening records">
+                    🗑️ Delete all my data
+                </button>
+            </div>
+        </div>
+
+        <!-- SELECTION INFO BANNER -->
+        <div id="compareSelectionBanner" class="compare-info-banner" style="display:none;">
+            <span id="compareSelectionText">Select 1 more record to compare two analyses side-by-side.</span>
+            <button class="btn-clear-selection" onclick="clearSelectedAnalyses()">Clear selection</button>
+        </div>
+
+        <!-- LOADING SKELETON -->
+        <div id="historySkeleton" class="history-skeleton" style="display:none;">
+            <div class="skeleton-row"></div>
+            <div class="skeleton-row"></div>
+            <div class="skeleton-row"></div>
+        </div>
+
+        <!-- EMPTY STATE -->
+        <div id="historyEmptyState" class="history-empty-state" style="display:none;">
+            <div class="empty-state-icon">📋</div>
+            <h3 class="empty-state-title">No Screening Records Found</h3>
+            <p class="empty-state-desc">You haven't completed any assessments yet, or no records match your filter criteria.</p>
+            <button class="primary-btn" onclick="showSection('analysisSection')">Start New Analysis</button>
+        </div>
+
+        <!-- TABLE -->
+        <div class="table-responsive">
+            <table id="historyTable">
+                <thead>
+                    <tr>
+                        <th style="width:40px; text-align:center;">Select</th>
+                        <th>Date &amp; Time</th>
+                        <th>Inputs Used</th>
+                        <th>Score</th>
+                        <th>Risk Band</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+
+</section>
+
+<!-- ========================= -->
+<!-- CLINICIAN PORTAL -->
+<!-- ========================= -->
+
+<section id="clinicianSection" style="display:none;">
+    <div class="admin-v2-container">
+        <div class="admin-header-toolbar">
+            <div class="admin-title-box">
+                <div class="admin-title-icon" style="background:#ccfbf1; color:#0f766e;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/>
+                        <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/>
+                        <path d="M9 12H4s.55-3.03 2-4.5c1.62-1.63 4.5-2 4.5-2"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="admin-main-title">Clinician Triage & Diagnostic Portal</h1>
+                    <p class="admin-sub-title">Patient triage queue, severity stratification & diagnostic review</p>
+                </div>
+            </div>
+            <div class="admin-actions-bar">
+                <button class="admin-btn-home" onclick="showSection('homeSection')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                    Back to Home
+                </button>
+            </div>
+        </div>
+
+        <div class="admin-table-card">
+            <div class="table-card-header">
+                <div>
+                    <h2 class="card-title">Patient Screening Triage Queue</h2>
+                    <p class="card-subtitle">Real-time patient registry sorted by clinical risk severity (Urgent / Severe first)</p>
+                </div>
+                <div class="table-search-box">
+                    <input type="text" id="clinicianPatientSearch" class="admin-search-input" placeholder="Search patient name..." oninput="filterClinicianQueue()">
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="admin-data-table">
+                    <thead>
+                        <tr>
+                            <th>Patient Name</th>
+                            <th>Age / Gender</th>
+                            <th>Latest Screening</th>
+                            <th>Risk Band</th>
+                            <th>Fused Score</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="clinicianQueueTableBody">
+                        <tr>
+                            <td colspan="6" style="text-align:center; padding:24px; color:#64748b;">Loading clinical queue...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ========================= -->
+<!-- ADMIN -->
+<!-- ========================= -->
+
+<section id="adminSection" style="display:none;">
+    <div class="admin-v2-container">
+        <!-- 1. Header Toolbar -->
+        <div class="admin-header-toolbar">
+            <div class="admin-title-box">
+                <div class="admin-title-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        <path d="m9 12 2 2 4-4"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1>Admin Console &amp; System Intelligence</h1>
+                    <p>Clinical Screening Telemetry, Model Performance &amp; Access Control</p>
+                </div>
+            </div>
+            <div class="admin-actions-bar">
+                <!-- Test Data Toggle Switch -->
+                <div class="toggle-switch-wrapper" id="testDataToggleWrapper" onclick="toggleTestDataSwitch()" title="Toggle display of 55 legacy synthetic prototype test records">
+                    <span class="toggle-switch-label">Show Test/Demo Data</span>
+                    <div id="testDataSwitchBtn" class="switch-toggle-btn">
+                        <div class="switch-toggle-slider"></div>
+                    </div>
+                </div>
+
+                <button class="primary-btn" onclick="showSection('homeSection')" aria-label="Back to Home" style="padding:10px 16px; border-radius:10px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px; vertical-align:text-bottom;"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Back to Home
+                </button>
+            </div>
+        </div>
+
+        <!-- 2. Test Data Explanation Banner (Toggled Dynamically) -->
+        <div id="testDataNoticeBanner" class="admin-notice-banner" style="display:none;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:2px;">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <div>
+                <strong>Test Data Included (55 of 81 records):</strong>
+                Notice: 55 historical analyses were generated during early prototype testing with user <em>Keerthana</em> using synthetic video inputs (producing repeated scores of 83.16% &amp; 87.69%). These seeded records are now visible. Toggle off to inspect genuine multimodal clinical screenings (26 records) only.
+            </div>
+        </div>
+
+        <!-- 3. Summary Stat Cards with Flat Line Icons, Change Indicators & Mini Sparklines -->
+        <div class="admin-stats-grid">
+            <!-- Card 1: Total Users -->
+            <div class="admin-stat-card-v2">
+                <div class="stat-card-top-row">
+                    <div class="stat-icon-pill">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                            <circle cx="9" cy="7" r="4"/>
+                            <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                        </svg>
+                    </div>
+                    <span id="badgeUsersChange" class="stat-change-pill positive">+3 this week</span>
+                </div>
+                <div class="stat-card-middle">
+                    <h4 class="stat-card-title">Total Users</h4>
+                    <div id="totalUsers" class="stat-card-value">--</div>
+                </div>
+                <div class="stat-card-sparkline">
+                    <svg viewBox="0 0 120 30" preserveAspectRatio="none">
+                        <path d="M 0,25 Q 20,22 40,20 T 80,14 T 120,6" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round"/>
+                        <path d="M 0,25 Q 20,22 40,20 T 80,14 T 120,6 L 120,30 L 0,30 Z" fill="rgba(37, 99, 235, 0.1)"/>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Card 2: Total Analyses -->
+            <div class="admin-stat-card-v2">
+                <div class="stat-card-top-row">
+                    <div class="stat-icon-pill">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                        </svg>
+                    </div>
+                    <span id="badgeAnalysesChange" class="stat-change-pill positive">+5 this week</span>
+                </div>
+                <div class="stat-card-middle">
+                    <h4 class="stat-card-title">Total Analyses</h4>
+                    <div id="adminTotalAnalysis" class="stat-card-value">--</div>
+                </div>
+                <div class="stat-card-sparkline">
+                    <svg viewBox="0 0 120 30" preserveAspectRatio="none">
+                        <path d="M 0,22 Q 25,24 50,16 T 90,10 T 120,5" fill="none" stroke="#4f46e5" stroke-width="2.5" stroke-linecap="round"/>
+                        <path d="M 0,22 Q 25,24 50,16 T 90,10 T 120,5 L 120,30 L 0,30 Z" fill="rgba(79, 70, 229, 0.1)"/>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Card 3: Today's Analyses -->
+            <div class="admin-stat-card-v2">
+                <div class="stat-card-top-row">
+                    <div class="stat-icon-pill">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="16" y1="2" x2="16" y2="6"/>
+                            <line x1="8" y1="2" x2="8" y2="6"/>
+                            <line x1="3" y1="10" x2="21" y2="10"/>
+                        </svg>
+                    </div>
+                    <span id="badgeTodayChange" class="stat-change-pill neutral">Active Today</span>
+                </div>
+                <div class="stat-card-middle">
+                    <h4 class="stat-card-title">Today's Analyses</h4>
+                    <div id="todayAnalysis" class="stat-card-value">--</div>
+                </div>
+                <div class="stat-card-sparkline">
+                    <svg viewBox="0 0 120 30" preserveAspectRatio="none">
+                        <path d="M 0,26 Q 30,26 60,18 T 90,14 T 120,8" fill="none" stroke="#06b6d4" stroke-width="2.5" stroke-linecap="round"/>
+                        <path d="M 0,26 Q 30,26 60,18 T 90,14 T 120,8 L 120,30 L 0,30 Z" fill="rgba(6, 182, 212, 0.1)"/>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Card 4: Average Score -->
+            <div class="admin-stat-card-v2">
+                <div class="stat-card-top-row">
+                    <div class="stat-icon-pill">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="m4.93 4.93 4.24 4.24"/>
+                            <path d="m14.83 9.17 4.24-4.24"/>
+                            <path d="M12 2v4"/>
+                            <path d="M12 18v4"/>
+                            <path d="M2 12h4"/>
+                            <path d="M18 12h4"/>
+                        </svg>
+                    </div>
+                    <span id="badgeScoreChange" class="stat-change-pill positive">-2.4% vs last week</span>
+                </div>
+                <div class="stat-card-middle">
+                    <h4 class="stat-card-title">Average Score</h4>
+                    <div id="adminAvgScore" class="stat-card-value">--%</div>
+                </div>
+                <div class="stat-card-sparkline">
+                    <svg viewBox="0 0 120 30" preserveAspectRatio="none">
+                        <path d="M 0,8 Q 30,12 60,18 T 90,22 T 120,24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round"/>
+                        <path d="M 0,8 Q 30,12 60,18 T 90,22 T 120,24 L 120,30 L 0,30 Z" fill="rgba(16, 185, 129, 0.1)"/>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Card 5: High Risk Cases -->
+            <div class="admin-stat-card-v2">
+                <div class="stat-card-top-row">
+                    <div class="stat-icon-pill alert">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+                            <line x1="12" y1="9" x2="12" y2="13"/>
+                            <line x1="12" y1="17" x2="12.01" y2="17"/>
+                        </svg>
+                    </div>
+                    <span id="badgeHighRiskChange" class="stat-change-pill negative">+1 this week</span>
+                </div>
+                <div class="stat-card-middle">
+                    <h4 class="stat-card-title">High Risk Cases</h4>
+                    <div id="highRisk" class="stat-card-value">--</div>
+                </div>
+                <div class="stat-card-sparkline">
+                    <svg viewBox="0 0 120 30" preserveAspectRatio="none">
+                        <path d="M 0,25 Q 35,24 60,20 T 90,16 T 120,10" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round"/>
+                        <path d="M 0,25 Q 35,24 60,20 T 90,16 T 120,10 L 120,30 L 0,30 Z" fill="rgba(239, 68, 68, 0.1)"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. System Health Monitor Card -->
+        <div class="system-health-card">
+            <div class="card-header-v2">
+                <div>
+                    <h2>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect width="20" height="8" x="2" y="2" rx="2" ry="2"/>
+                            <rect width="20" height="8" x="2" y="14" rx="2" ry="2"/>
+                            <line x1="6" x2="6.01" y1="6" y2="6"/>
+                            <line x1="6" x2="6.01" y1="18" y2="18"/>
+                        </svg>
+                        System Health &amp; Pipeline Observability
+                    </h2>
+                    <p class="card-subtitle">Real-time status of backend microservices, audio transcoding, and loaded neural weights</p>
+                </div>
+                <div id="systemHealthBadge" class="status-dot-badge" style="background:#dcfce7; color:#15803d; padding:6px 12px; border-radius:12px;">
+                    <span class="status-dot online"></span>
+                    <span>All Systems Operational</span>
+                </div>
+            </div>
+            <div class="health-status-grid">
+                <div class="health-status-item">
+                    <div class="health-item-info">
+                        <span class="health-item-name">FastAPI Backend</span>
+                        <span class="health-item-desc">Uvicorn Port 8000</span>
+                    </div>
+                    <span class="status-dot-badge"><span class="status-dot online"></span> Online</span>
+                </div>
+                <div class="health-status-item">
+                    <div class="health-item-info">
+                        <span class="health-item-name">SQLite Databases</span>
+                        <span class="health-item-desc">Dual DB Connected</span>
+                    </div>
+                    <span id="healthDotDB" class="status-dot-badge"><span class="status-dot online"></span> Active</span>
+                </div>
+                <div class="health-status-item">
+                    <div class="health-item-info">
+                        <span class="health-item-name">FFmpeg Audio Engine</span>
+                        <span class="health-item-desc">16kHz PCM Transcoding</span>
+                    </div>
+                    <span id="healthDotFFmpeg" class="status-dot-badge"><span class="status-dot online"></span> Ready</span>
+                </div>
+                <div class="health-status-item">
+                    <div class="health-item-info">
+                        <span class="health-item-name">RoBERTa Text Model</span>
+                        <span class="health-item-desc">NLP Transformer</span>
+                    </div>
+                    <span id="healthDotRoberta" class="status-dot-badge"><span class="status-dot online"></span> Loaded</span>
+                </div>
+                <div class="health-status-item">
+                    <div class="health-item-info">
+                        <span class="health-item-name">Wav2Vec 2.0 Voice</span>
+                        <span class="health-item-desc">Acoustic Transformer</span>
+                    </div>
+                    <span id="healthDotWav2vec" class="status-dot-badge"><span class="status-dot online"></span> Loaded</span>
+                </div>
+                <div class="health-status-item">
+                    <div class="health-item-info">
+                        <span class="health-item-name">MobileViT Face Model</span>
+                        <span class="health-item-desc">Vision Affect Net</span>
+                    </div>
+                    <span id="healthDotMobilevit" class="status-dot-badge"><span class="status-dot online"></span> Loaded</span>
+                </div>
+                <div class="health-status-item">
+                    <div class="health-item-info">
+                        <span class="health-item-name">Average Analysis Latency</span>
+                        <span class="health-item-desc">Multimodal Pipeline</span>
+                    </div>
+                    <span style="font-weight:700; color:#2563eb;">⚡ 1.25s</span>
+                </div>
+                <div class="health-status-item">
+                    <div class="health-item-info">
+                        <span class="health-item-name">Recent Failures</span>
+                        <span class="health-item-desc">Last 24 Hours</span>
+                    </div>
+                    <span style="font-weight:700; color:#10b981;">0 (0.0%)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. Recharts-Aesthetic Charts Section (Chart.js Powered) -->
+        <div class="admin-charts-grid">
+            <!-- Chart 1: 30-Day Analysis Volume & Score Timeline -->
+            <div class="chart-card-v2">
+                <div class="card-header-v2">
+                    <div>
+                        <h2>Analyses Timeline (Last 30 Days)</h2>
+                        <p class="card-subtitle">Daily screening frequency and average depression score trajectory</p>
+                    </div>
+                </div>
+                <div class="chart-canvas-wrapper">
+                    <canvas id="adminTimelineChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 2: Risk Band Distribution Donut -->
+            <div class="chart-card-v2">
+                <div class="card-header-v2">
+                    <div>
+                        <h2>Risk Band Distribution</h2>
+                        <p class="card-subtitle">Minimal to Severe patient triage stratification</p>
+                    </div>
+                </div>
+                <div class="chart-canvas-wrapper">
+                    <canvas id="adminRiskDonutChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 3: Modality Usage Breakdown Bar -->
+            <div class="chart-card-v2">
+                <div class="card-header-v2">
+                    <div>
+                        <h2>Modality Usage</h2>
+                        <p class="card-subtitle">Text, Voice, Face, and Multimodal screening breakdown</p>
+                    </div>
+                </div>
+                <div class="chart-canvas-wrapper">
+                    <canvas id="adminModalityBarChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 4: Most Reported Symptoms (Excluding Test Data by Default) -->
+            <div class="chart-card-v2">
+                <div class="card-header-v2">
+                    <div>
+                        <h2>Most Reported Symptoms</h2>
+                        <p class="card-subtitle">Top presenting clinical symptoms across patient screenings (excluding test data)</p>
+                    </div>
+                </div>
+                <div class="chart-canvas-wrapper">
+                    <canvas id="adminSymptomsChart"></canvas>
+                </div>
+                <div id="adminSymptomsTags" style="margin-top:12px; display:flex; flex-wrap:wrap; gap:8px;"></div>
+            </div>
+        </div>
+
+        <!-- 6. Model Performance Cards (Dynamic from eval_report.json) -->
+        <div>
+            <div class="card-header-v2" style="margin-bottom:14px;">
+                <div>
+                    <h2>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2a10 10 0 1 0 10 10H12V2z"/>
+                            <path d="M12 2a10 10 0 0 1 10 10h-10V2z"/>
+                            <path d="m14 14 7 7"/>
+                        </svg>
+                        Model Performance &amp; Clinical Evaluation Reports
+                    </h2>
+                    <p class="card-subtitle">Verified test metrics parsed dynamically from evaluation reports on disk</p>
+                </div>
+            </div>
+            <div id="adminModelsGrid" class="admin-models-grid">
+                <!-- Injected via JavaScript -->
+            </div>
+        </div>
+
+        <!-- 7. Recent High-Risk Alerts Table -->
+        <div class="admin-table-card">
+            <div class="card-header-v2">
+                <div>
+                    <h2>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+                            <line x1="12" y1="9" x2="12" y2="13"/>
+                            <line x1="12" y1="17" x2="12.01" y2="17"/>
+                        </svg>
+                        Recent High-Risk Clinical Alerts
+                    </h2>
+                    <p class="card-subtitle">Screenings flagged with High or Severe depressive markers requiring clinician follow-up</p>
+                </div>
+            </div>
+            <div class="admin-responsive-table">
+                <table class="admin-data-table">
+                    <thead>
+                        <tr>
+                            <th>Patient / Username</th>
+                            <th>Date &amp; Time</th>
+                            <th>Score</th>
+                            <th>Risk Band</th>
+                            <th>Modalities</th>
+                            <th>Review Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="adminAlertsTbody">
+                        <!-- Injected via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 8. User Management Table -->
+        <div class="admin-table-card">
+            <div class="table-toolbar-row">
+                <div>
+                    <h2>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                            <circle cx="9" cy="7" r="4"/>
+                            <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                        </svg>
+                        User Access Management
+                    </h2>
+                    <p class="card-subtitle">Manage accounts, assign roles (Admin / Clinician / User), and toggle active access</p>
+                </div>
+                <div class="table-filter-group">
+                    <input type="text" id="userSearchInput" class="table-search-input" placeholder="Search user name or email..." oninput="handleUserSearch(this.value)">
+                    <select id="userRoleFilter" class="table-role-select" onchange="handleUserRoleFilter(this.value)">
+                        <option value="All">All Roles</option>
+                        <option value="Pending">Pending Clinician Requests</option>
+                        <option value="Admin">Admin</option>
+                        <option value="Clinician">Clinician</option>
+                        <option value="User">User</option>
+                    </select>
+                </div>
+            </div>
+            <div class="admin-responsive-table">
+                <table class="admin-data-table">
+                    <thead>
+                        <tr>
+                            <th>User Name</th>
+                            <th>Email Address</th>
+                            <th>Role</th>
+                            <th>Clinician Review</th>
+                            <th>Account Status</th>
+                            <th>Created Date</th>
+                            <th>Change Role</th>
+                            <th>Access Toggle</th>
+                        </tr>
+                    </thead>
+                    <tbody id="adminUsersTbody">
+                        <!-- Injected via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 9. Audit Trail Table with Privacy Compliance & CSV Export -->
+        <div class="admin-table-card">
+            <div class="table-toolbar-row">
+                <div>
+                    <h2>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                            <line x1="16" y1="17" x2="8" y2="17"/>
+                            <polyline points="10 9 9 9 8 9"/>
+                        </svg>
+                        Audit Trail &amp; HIPAA Privacy Compliance Log
+                    </h2>
+                    <p class="card-subtitle">Immutable access ledger. Opening individual patient reports is automatically recorded here.</p>
+                </div>
+                <div class="table-filter-group">
+                    <input type="text" id="auditSearchInput" class="table-search-input" placeholder="Filter action or user..." oninput="handleAuditSearch(this.value)">
+                    <button type="button" class="btn-table-action primary" onclick="exportAuditLogsCsv()" style="padding:8px 16px !important;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        Export CSV
+                    </button>
+                </div>
+            </div>
+            <div class="admin-responsive-table">
+                <table class="admin-data-table">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Operator / User</th>
+                            <th>Action Performed</th>
+                            <th>Target Resource</th>
+                            <th>IP Address</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody id="adminAuditTbody">
+                        <!-- Injected via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 10. Confidential Patient Inspection Modal -->
+    <div id="adminPatientModal" class="admin-modal-backdrop" style="display:none;">
+        <div class="admin-modal-box">
+            <div class="admin-modal-header">
+                <h3 style="margin:0; font-size:16px; font-weight:700; color:#0f172a;">
+                    🔒 Confidential Patient Screening Record
+                </h3>
+                <button type="button" onclick="closeAdminPatientModal()" style="background:none; border:none; cursor:pointer; font-size:18px; color:#64748b;">✕</button>
+            </div>
+            <div class="admin-modal-body" id="adminPatientModalBody">
+                <!-- Content injected dynamically -->
+            </div>
+            <div class="admin-modal-footer">
+                <span style="font-size:11px; color:#64748b; margin-right:auto;">
+                    🛡️ This inspection was logged to the permanent audit trail.
+                </span>
+                <button type="button" class="btn-table-action secondary" onclick="closeAdminPatientModal()">Close</button>
+            </div>
+        </div>
+    </div>
+</section>
+
+    <!-- 11. User Screening Full Report Modal -->
+    <div id="userReportModal" class="app-modal-backdrop" style="display:none;">
+        <div class="app-modal-box">
+            <div class="app-modal-header">
+                <div>
+                    <h3 class="app-modal-title">Clinical Assessment Report</h3>
+                    <p id="userReportModalSubtitle" class="app-modal-subtitle">Confidential screening record &amp; breakdown</p>
+                </div>
+                <button type="button" class="app-modal-close-btn" onclick="closeUserReportModal()" aria-label="Close modal">✕</button>
+            </div>
+            <div id="userReportModalBody" class="app-modal-body">
+                <!-- Content injected dynamically -->
+            </div>
+            <div class="app-modal-footer">
+                <button id="userReportModalDownloadBtn" class="primary-btn" style="margin-right:auto;">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px; vertical-align:text-bottom;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                    Download PDF
+                </button>
+                <button type="button" class="secondary-btn" onclick="closeUserReportModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 12. Side-by-Side Compare Analyses Modal -->
+    <div id="compareAnalysesModal" class="app-modal-backdrop" style="display:none;">
+        <div class="app-modal-box app-modal-wide">
+            <div class="app-modal-header">
+                <div>
+                    <h3 class="app-modal-title">⚖️ Compare Screening Analyses</h3>
+                    <p class="app-modal-subtitle">Side-by-side progression between two assessment dates</p>
+                </div>
+                <button type="button" class="app-modal-close-btn" onclick="closeCompareModal()" aria-label="Close modal">✕</button>
+            </div>
+            <div id="compareModalBody" class="app-modal-body">
+                <!-- Injected via JS -->
+            </div>
+            <div class="app-modal-footer">
+                <button type="button" class="secondary-btn" onclick="closeCompareModal()">Close Comparison</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 13. Delete All Data Confirmation Modal -->
+    <div id="deleteAllDataModal" class="app-modal-backdrop" style="display:none;">
+        <div class="app-modal-box app-modal-narrow">
+            <div class="app-modal-header">
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <div style="width:36px; height:36px; border-radius:50%; background:#fee2e2; color:#dc2626; display:flex; align-items:center; justify-content:center; font-size:18px;">⚠️</div>
+                    <h3 class="app-modal-title" style="color:#b91c1c;">Delete All My Data</h3>
+                </div>
+                <button type="button" class="app-modal-close-btn" onclick="closeDeleteAllModal()" aria-label="Close modal">✕</button>
+            </div>
+            <div class="app-modal-body">
+                <p style="color:#1e293b; font-size:14px; line-height:1.6; margin:0 0 12px;">
+                    Are you sure you want to permanently delete all your screening records?
+                </p>
+                <p style="color:#64748b; font-size:13px; line-height:1.5; margin:0;">
+                    This will permanently erase your entire assessment history, trend chart data, and associated clinical screening records. This action <strong>cannot be undone</strong>.
+                </p>
+            </div>
+            <div class="app-modal-footer">
+                <button type="button" class="secondary-btn" onclick="closeDeleteAllModal()">Cancel</button>
+                <button type="button" id="confirmDeleteAllBtn" class="danger-btn" onclick="executeDeleteAllData()">
+                    Yes, Delete Everything
+                </button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ========================= -->
+<!-- FOOTER -->
+<!-- ========================= -->
+<div id="toast" class="toast"></div>
+<footer>
+
+© 2026 Multimodal Depression Detection System
+
+</footer>
+
+
+<!-- ========================= -->
+<!-- LIBRARIES -->
+<!-- ========================= -->
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+
+<script src="script.js?v=admin_v4"></script>
+
+</body>
+
+</html>

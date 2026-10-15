@@ -1,0 +1,78 @@
+# Environment Variables & Secrets (CRITICAL)
+.env
+.env.*
+.env.local
+.env.production
+!.env.example
+
+# Local SQLite Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Python Virtual Environments
+venv/
+env/
+.venv/
+ENV/
+
+# Python Bytecode & Cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node & Frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Uploads & Generated Reports
+uploads/
+reports/
+backend/uploads/
+backend/reports/
+!backend/uploads/.gitkeep
+!backend/reports/.gitkeep
+
+# Heavy ML Weights & Checkpoints (Load from HF Hub or Bucket)
+models/
+backend/models/
+*.pth
+*.pt
+*.bin
+*.onnx
+*.safetensors
+
+# Test media files, recordings, and temp frames
+*.wav
+*.mp3
+*.m4a
+*.mp4
+*.webm
+test_*.wav
+temp_frame_*.jpg
+*.png
+!frontend/*.png
+
+# Heavy datasets and nested workspace copies
+**/datasets/
+datasets/
+depression_detection/
+scratch_*.py
+scratch/
+browser/
+capture_user_flow_screenshots.py
+test_new_register_and_google.py
+tests_e2e_journey.py
+run_all_tests.py
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
