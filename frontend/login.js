@@ -3,7 +3,7 @@
  * Handles Login, Registration, Google OAuth, Password Show/Hide, and Reset
  */
 
-const PROD_BACKEND_URL = window.__API_URL__ || window.localStorage.getItem("MINDSCAN_API_URL") || "";
+const PROD_BACKEND_URL = window.__API_URL__ || window.localStorage.getItem("MINDSCAN_API_URL") || "https://mindscan-backend-7m9h.onrender.com";
 const isLocalhost = Boolean(
     window.location.hostname === "localhost" ||
     window.location.hostname === "127.0.0.1" ||
