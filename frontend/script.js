@@ -1688,15 +1688,8 @@ function renderHomeDashboard(records) {
     const greetingEl = document.getElementById("homeUserGreeting");
     if (greetingEl) greetingEl.innerText = displayName;
 
-    const navWelcome = document.getElementById("welcome");
-    if (navWelcome) navWelcome.innerText = `Welcome, ${displayName}`;
-
-    // Role-specific home cards visibility
     const role = localStorage.getItem("role") || "User";
-    const adminCard = document.getElementById("adminHomeCard");
-    const clinicianCard = document.getElementById("clinicianHomeCard");
-    if (adminCard) adminCard.style.display = (role === "Admin") ? "block" : "none";
-    if (clinicianCard) clinicianCard.style.display = (role === "Clinician" || role === "Admin") ? "block" : "none";
+    updateRoleUI({ full_name: displayName, role: role });
 
     // 2. Latest Result Card
     const latestCard = document.getElementById("homeLatestResultCard");
