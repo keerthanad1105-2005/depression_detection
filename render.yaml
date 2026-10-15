@@ -1,0 +1,53 @@
+version: "1"
+
+databases:
+  - name: mindscan-db
+    databaseName: mindscan
+    user: mindscan
+    plan: free
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. Backend Web Service (FastAPI, Python 3.10 slim, FFmpeg, Alembic)
+  # ----------------------------------------------------------------------------
+  - type: web
+    name: mindscan-backend
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mindscan-db
+          property: connectionString
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_REGISTRATION_CODE
+        generateValue: true
+      - key: CLINICIAN_REGISTRATION_CODE
+        generateValue: true
+      - key: WEB_CONCURRENCY
+        value: "1"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: CORS_ORIGINS
+        value: "*"
+
+  # ----------------------------------------------------------------------------
+  # 2. Frontend Static Web Service (HTML, CSS, JS)
+  # ----------------------------------------------------------------------------
+  - type: web
+    name: mindscan-frontend
+    runtime: static
+    rootDir: frontend
+    staticPublishPath: .
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
