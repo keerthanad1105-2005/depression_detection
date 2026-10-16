@@ -10,9 +10,63 @@ const isLocalhost = Boolean(
     window.location.hostname === ""
 );
 
-const API_BASE = isLocalhost
+let API_BASE = isLocalhost
     ? (window.location.port === "8000" ? window.location.origin : "http://127.0.0.1:8000")
     : (PROD_BACKEND_URL || window.location.origin);
+
+// Auto-resolve backend and pre-warm container to prevent spin-down latency
+async function checkBackendConnectivity() {
+    const statusChip = document.getElementById("backendStatusChip");
+    const statusDot = document.getElementById("backendStatusDot");
+    const statusText = document.getElementById("backendStatusText");
+
+    function updateStatus(color, text) {
+        if (statusDot) statusDot.style.background = color;
+        if (statusText) statusText.textContent = text;
+        if (statusChip) statusChip.style.display = "flex";
+    }
+
+    if (isLocalhost) {
+        // Try local backend first
+        try {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 1200);
+            const r = await fetch("http://127.0.0.1:8000/health", { signal: ctrl.signal });
+            clearTimeout(timer);
+            if (r.ok) {
+                API_BASE = "http://127.0.0.1:8000";
+                updateStatus("#10b981", "Local Server Online (127.0.0.1:8000)");
+                return;
+            }
+        } catch (_) {
+            console.log("[MindScan] Local backend offline; routing to live cloud backend:", PROD_BACKEND_URL);
+            API_BASE = PROD_BACKEND_URL;
+        }
+    }
+
+    // Ping cloud backend to pre-warm / ensure active
+    updateStatus("#f59e0b", isLocalhost ? "Connecting to Cloud Server..." : "Connecting to Cloud Server...");
+    for (let i = 0; i < 15; i++) {
+        try {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 4000);
+            const r = await fetch(`${API_BASE}/health`, { signal: ctrl.signal });
+            clearTimeout(timer);
+            if (r.ok) {
+                updateStatus("#10b981", isLocalhost ? "Cloud Server Connected (Fallback)" : "Cloud Server Online");
+                return;
+            }
+        } catch (_) {}
+        await new Promise(res => setTimeout(res, 2000));
+    }
+    updateStatus("#ef4444", "Backend Offline (Click to retry)");
+}
+
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", checkBackendConnectivity);
+} else {
+    checkBackendConnectivity();
+}
 
 // Helper: Show Alert Banner
 function showAlert(elementId, message, type = "error") {
@@ -287,65 +341,91 @@ function initAuthClient() {
             btnText.textContent = "Logging in...";
             spinner.style.display = "inline-block";
 
-            try {
-                const response = await fetch(`${API_BASE}/api/v1/auth/login`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        email: identifier,
-                        username_or_email: identifier,
-                        password: password
-                    })
-                });
+            let response;
+            let lastErr = null;
+            const maxAttempts = 3;
 
-                let data = {};
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                 try {
-                    data = await response.json();
-                } catch (_) {
-                    data = { detail: "Server error (" + response.status + "). Please try again." };
-                }
+                    response = await fetch(`${API_BASE}/api/v1/auth/login`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            email: identifier,
+                            username_or_email: identifier,
+                            password: password
+                        })
+                    });
 
-                if (!response.ok) {
-                    submitBtn.disabled = false;
-                    btnText.textContent = "Login";
-                    spinner.style.display = "none";
-
-                    if (response.status === 401) {
-                        showAlert("authAlert", "Incorrect email or password.", "error");
-                    } else if (response.status === 429) {
-                        showAlert("authAlert", data.detail || "Too many failed attempts. Please try again later.", "error");
-                    } else {
-                        showAlert("authAlert", data.detail || "Login failed. Please verify credentials.", "error");
+                    // If Cloud container is returning 502 Bad Gateway during spin-up, retry
+                    if (response.status === 502 && attempt < maxAttempts) {
+                        btnText.textContent = `Waking up server (${attempt}/${maxAttempts})...`;
+                        await new Promise(r => setTimeout(r, 3000));
+                        continue;
                     }
-                    return;
+                    break;
+                } catch (netErr) {
+                    lastErr = netErr;
+                    if (attempt < maxAttempts) {
+                        btnText.textContent = `Connecting to server (${attempt}/${maxAttempts})...`;
+                        await new Promise(r => setTimeout(r, 2500));
+                        // If localhost failed, switch to cloud backend on retry
+                        if (isLocalhost && API_BASE !== PROD_BACKEND_URL) {
+                            API_BASE = PROD_BACKEND_URL;
+                        }
+                    }
                 }
+            }
 
-                // Successful Login: Save JWT and User Info
-                localStorage.setItem("access_token", data.access_token);
-                localStorage.setItem("refresh_token", data.refresh_token);
-                if (data.user) {
-                    localStorage.setItem("user_id", data.user.id);
-                    localStorage.setItem("username", data.user.username);
-                    localStorage.setItem("full_name", data.user.full_name);
-                    localStorage.setItem("email", data.user.email);
-                    localStorage.setItem("role", data.user.role);
-                }
-
-                const displayName = (data.user && data.user.full_name) ? data.user.full_name : "User";
-                const userRole = (data.user && data.user.role) ? data.user.role : "User";
-                sessionStorage.setItem("just_logged_in", "true");
-                showAlert("authAlert", `Welcome back, ${displayName}. You are signed in as ${userRole}.`, "success");
-                setTimeout(() => {
-                    window.location.replace("index.html");
-                }, 800);
-
-            } catch (err) {
-                console.error("Login network error:", err);
+            if (!response) {
+                console.error("Login network error:", lastErr);
                 submitBtn.disabled = false;
                 btnText.textContent = "Login";
                 spinner.style.display = "none";
                 showAlert("authAlert", "Could not reach authentication server. Please check backend connection.", "error");
+                return;
             }
+
+            let data = {};
+            try {
+                data = await response.json();
+            } catch (_) {
+                data = { detail: "Server error (" + response.status + "). Please try again." };
+            }
+
+            if (!response.ok) {
+                submitBtn.disabled = false;
+                btnText.textContent = "Login";
+                spinner.style.display = "none";
+
+                if (response.status === 401) {
+                    showAlert("authAlert", "Incorrect email or password.", "error");
+                } else if (response.status === 429) {
+                    showAlert("authAlert", data.detail || "Too many failed attempts. Please try again later.", "error");
+                } else {
+                    showAlert("authAlert", data.detail || "Login failed. Please verify credentials.", "error");
+                }
+                return;
+            }
+
+            // Successful Login: Save JWT and User Info
+            localStorage.setItem("access_token", data.access_token);
+            localStorage.setItem("refresh_token", data.refresh_token);
+            if (data.user) {
+                localStorage.setItem("user_id", data.user.id);
+                localStorage.setItem("username", data.user.username);
+                localStorage.setItem("full_name", data.user.full_name);
+                localStorage.setItem("email", data.user.email);
+                localStorage.setItem("role", data.user.role);
+            }
+
+            const displayName = (data.user && data.user.full_name) ? data.user.full_name : "User";
+            const userRole = (data.user && data.user.role) ? data.user.role : "User";
+            sessionStorage.setItem("just_logged_in", "true");
+            showAlert("authAlert", `Welcome back, ${displayName}. You are signed in as ${userRole}.`, "success");
+            setTimeout(() => {
+                window.location.replace("index.html");
+            }, 800);
         });
     }
 

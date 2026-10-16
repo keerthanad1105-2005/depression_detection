@@ -170,6 +170,12 @@
                 <p class="bottom-prompt">
                     Already have an account? <a href="login.html" id="loginLink">Login</a>
                 </p>
+
+                <!-- Server Connectivity Indicator -->
+                <div id="backendStatusChip" class="backend-status-chip" style="display:flex; align-items:center; justify-content:center; gap:6px; margin-top:14px; font-size:11px; color:#64748b; font-weight:500;">
+                    <span id="backendStatusDot" style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#10b981;"></span>
+                    <span id="backendStatusText">Connecting to backend...</span>
+                </div>
             </form>
         </div>
     </div>

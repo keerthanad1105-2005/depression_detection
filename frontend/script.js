@@ -13,9 +13,29 @@ const isLocalhost = Boolean(
     window.location.hostname === ""
 );
 
-const API_URL = isLocalhost
+let API_URL = isLocalhost
     ? (window.location.port === "8000" ? window.location.origin : "http://127.0.0.1:8000")
     : (PROD_BACKEND_URL || window.location.origin);
+
+// Verify connectivity and auto-fallback if local backend is down
+async function initScriptBackend() {
+    if (isLocalhost) {
+        try {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 1200);
+            const r = await fetch("http://127.0.0.1:8000/health", { signal: ctrl.signal });
+            clearTimeout(timer);
+            if (r.ok) {
+                API_URL = "http://127.0.0.1:8000";
+                return;
+            }
+        } catch (_) {
+            console.log("[MindScan] Local backend offline, switching to live cloud backend:", PROD_BACKEND_URL);
+            API_URL = PROD_BACKEND_URL;
+        }
+    }
+}
+initScriptBackend();
 
 /*=====================================================
             AUTHENTICATED FETCH WITH SILENT REFRESH
@@ -38,10 +58,25 @@ async function authFetch(url, options = {}, isRetry = false) {
     }
 
     let response;
-    try {
-        response = await fetch(url, opts);
-    } catch (netErr) {
-        throw netErr;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+            response = await fetch(url, opts);
+            if (response.status === 502 && attempt < 2) {
+                await new Promise(r => setTimeout(r, 2000));
+                continue;
+            }
+            break;
+        } catch (netErr) {
+            if (attempt < 2) {
+                await new Promise(r => setTimeout(r, 2000));
+                if (isLocalhost && API_URL !== PROD_BACKEND_URL && typeof url === "string" && url.includes("http://127.0.0.1:8000")) {
+                    API_URL = PROD_BACKEND_URL;
+                    url = url.replace("http://127.0.0.1:8000", PROD_BACKEND_URL);
+                }
+            } else {
+                throw netErr;
+            }
+        }
     }
 
     if (response.status === 401 && !isRetry && token && token !== "dev_session_token") {
