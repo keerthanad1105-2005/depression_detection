@@ -580,8 +580,9 @@ function initAuthClient() {
                         }
                     }
                 } catch (e) {
-                    // Fallback: assume available if network is down
-                    isEmailAvailable = true;
+                    // Do not falsely report available if server is offline
+                    isEmailAvailable = false;
+                    setValidation(valEmail, false, "Unable to verify email right now (server offline).");
                 } finally {
                     emailCheckInProgress = false;
                     validateForm();
@@ -719,81 +720,108 @@ function initAuthClient() {
             btnText.textContent = "Creating Account...";
             spinner.style.display = "inline-block";
 
-            try {
-                const response = await fetch(`${API_BASE}/api/v1/auth/register`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        full_name: fullName,
-                        email: email,
-                        password: password,
-                        role: selectedRole,
-                        access_code: accessCode
-                    })
-                });
+            let response;
+            let lastErr = null;
+            const maxAttempts = 3;
 
-                let data = {};
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                 try {
-                    data = await response.json();
-                } catch (_) {
-                    data = { detail: "Server error (" + response.status + "). Please try again." };
-                }
+                    response = await fetch(`${API_BASE}/api/v1/auth/register`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            full_name: fullName,
+                            email: email,
+                            password: password,
+                            role: selectedRole,
+                            access_code: accessCode
+                        })
+                    });
 
-                if (!response.ok) {
-                    submitBtn.disabled = false;
-                    btnText.textContent = "Register";
-                    spinner.style.display = "none";
-                    if (data.detail && data.detail.toLowerCase().includes("already registered")) {
-                        setValidation(valEmail, false, `Email already registered. <a href="login.html">Login here</a>`);
-                    } else if (data.detail && data.detail.toLowerCase().includes("access code")) {
-                        setValidation(valAccessCode, false, data.detail);
-                        showAlert("authAlert", data.detail, "error");
-                    } else {
-                        showAlert("authAlert", data.detail || "Registration failed.", "error");
+                    // If Cloud container is returning 502 during spin-up, retry
+                    if (response.status === 502 && attempt < maxAttempts) {
+                        btnText.textContent = `Waking up server (${attempt}/${maxAttempts})...`;
+                        await new Promise(r => setTimeout(r, 3000));
+                        continue;
                     }
-                    return;
-                }
-
-                // Successful Registration
-                const assignedRole = data.user?.role || selectedRole;
-                const isPendingClinician = selectedRole === "Clinician" && data.user?.clinician_status === "pending";
-                
-                let successMsg = "Account created successfully! Taking you to dashboard...";
-                if (assignedRole === "Admin") {
-                    successMsg = "Administrator account created successfully! Taking you to dashboard...";
-                } else if (assignedRole === "Clinician") {
-                    successMsg = "Clinician account verified and activated! Taking you to dashboard...";
-                } else if (isPendingClinician) {
-                    successMsg = "Account created! Clinician access request sent for admin approval. Redirecting...";
-                }
-                showAlert("authAlert", successMsg, "success");
-
-                // Auto sign-in or redirect
-                if (data.access_token) {
-                    localStorage.setItem("access_token", data.access_token);
-                    localStorage.setItem("refresh_token", data.refresh_token);
-                    if (data.user) {
-                        localStorage.setItem("user_id", data.user.id);
-                        localStorage.setItem("username", data.user.username);
-                        localStorage.setItem("full_name", data.user.full_name);
-                        localStorage.setItem("email", data.user.email);
-                        localStorage.setItem("role", data.user.role);
+                    break;
+                } catch (netErr) {
+                    lastErr = netErr;
+                    if (attempt < maxAttempts) {
+                        btnText.textContent = `Connecting to server (${attempt}/${maxAttempts})...`;
+                        await new Promise(r => setTimeout(r, 2500));
+                        if (isLocalhost && API_BASE !== PROD_BACKEND_URL) {
+                            API_BASE = PROD_BACKEND_URL;
+                        }
                     }
-                    setTimeout(() => {
-                        window.location.replace("index.html");
-                    }, 1200);
-                } else {
-                    setTimeout(() => {
-                        window.location.replace("login.html");
-                    }, 1400);
                 }
+            }
 
-            } catch (err) {
-                console.error("Register network error:", err);
+            if (!response) {
+                console.error("Register network error:", lastErr);
                 submitBtn.disabled = false;
                 btnText.textContent = "Register";
                 spinner.style.display = "none";
-                showAlert("authAlert", "Could not reach registration server. Please try again.", "error");
+                showAlert("authAlert", "Could not reach registration server. Please check backend connection.", "error");
+                return;
+            }
+
+            let data = {};
+            try {
+                data = await response.json();
+            } catch (_) {
+                data = { detail: "Server error (" + response.status + "). Please try again." };
+            }
+
+            if (!response.ok) {
+                submitBtn.disabled = false;
+                btnText.textContent = "Register";
+                spinner.style.display = "none";
+                if (data.detail && data.detail.toLowerCase().includes("already registered")) {
+                    setValidation(valEmail, false, `Email already registered. <a href="login.html">Login here</a>`);
+                } else if (data.detail && data.detail.toLowerCase().includes("access code")) {
+                    setValidation(valAccessCode, false, data.detail);
+                    showAlert("authAlert", `${data.detail}. Standard users should select 'User' role.`, "error");
+                } else if (response.status === 429) {
+                    showAlert("authAlert", data.detail || "Too many registration attempts. Please wait a few moments and try again.", "error");
+                } else {
+                    showAlert("authAlert", data.detail || "Registration failed.", "error");
+                }
+                return;
+            }
+
+            // Successful Registration
+            const assignedRole = data.user?.role || selectedRole;
+            const isPendingClinician = selectedRole === "Clinician" && data.user?.clinician_status === "pending";
+            
+            let successMsg = "Account created successfully! Taking you to dashboard...";
+            if (assignedRole === "Admin") {
+                successMsg = "Administrator account created successfully! Taking you to dashboard...";
+            } else if (assignedRole === "Clinician") {
+                successMsg = "Clinician account verified and activated! Taking you to dashboard...";
+            } else if (isPendingClinician) {
+                successMsg = "Account created! Clinician access request sent for admin approval. Redirecting...";
+            }
+            showAlert("authAlert", successMsg, "success");
+
+            // Auto sign-in or redirect
+            if (data.access_token) {
+                localStorage.setItem("access_token", data.access_token);
+                localStorage.setItem("refresh_token", data.refresh_token);
+                if (data.user) {
+                    localStorage.setItem("user_id", data.user.id);
+                    localStorage.setItem("username", data.user.username);
+                    localStorage.setItem("full_name", data.user.full_name);
+                    localStorage.setItem("email", data.user.email);
+                    localStorage.setItem("role", data.user.role);
+                }
+                setTimeout(() => {
+                    window.location.replace("index.html");
+                }, 1200);
+            } else {
+                setTimeout(() => {
+                    window.location.replace("login.html");
+                }, 1400);
             }
         });
     }
