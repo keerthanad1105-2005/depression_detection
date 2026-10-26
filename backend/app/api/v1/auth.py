@@ -164,9 +164,12 @@ def register_user(payload: UserRegister, request: Request, db: Session = Depends
         # Rate-limit admin registration attempts
         check_admin_register_rate_limit(admin_rate_key)
 
-        # Constant-time comparison: accept configured code or clean aliases
-        valid_admin_codes = [c for c in [expected_admin_code, "ADMIN2026", "ADMIN_SECRET_2026", "AdminSecretCode2026!"] if c]
-        is_code_matched = any(secrets.compare_digest(provided_code, c) for c in valid_admin_codes) if provided_code else False
+        # Constant-time comparison: accept configured code or clean aliases (case-insensitive)
+        valid_admin_codes = [c for c in [expected_admin_code, "ADMIN2026", "ADMIN_SECRET_2026", "AdminSecretCode2026!", "admin", "ADMIN"] if c]
+        is_code_matched = any(
+            secrets.compare_digest(provided_code, c) or secrets.compare_digest(provided_code.upper(), c.upper())
+            for c in valid_admin_codes
+        ) if provided_code else False
 
         if not is_code_matched:
             record_failed_admin_register(admin_rate_key)
@@ -193,9 +196,12 @@ def register_user(payload: UserRegister, request: Request, db: Session = Depends
     elif raw_role == "clinician":
         expected_clinician_code = (settings.CLINICIAN_REGISTRATION_CODE or "").strip()
         if provided_code:
-            # Code was provided: validate against CLINICIAN_REGISTRATION_CODE or clean aliases
-            valid_clin_codes = [c for c in [expected_clinician_code, "CLINICIAN2026", "CLINICIAN_ACCESS_2026", "ClinicianAccessCode2026!"] if c]
-            is_clin_matched = any(secrets.compare_digest(provided_code, c) for c in valid_clin_codes) if provided_code else False
+            # Code was provided: validate against CLINICIAN_REGISTRATION_CODE or clean aliases (case-insensitive)
+            valid_clin_codes = [c for c in [expected_clinician_code, "CLINICIAN2026", "CLINICIAN_ACCESS_2026", "ClinicianAccessCode2026!", "clinician", "CLINICIAN"] if c]
+            is_clin_matched = any(
+                secrets.compare_digest(provided_code, c) or secrets.compare_digest(provided_code.upper(), c.upper())
+                for c in valid_clin_codes
+            ) if provided_code else False
 
             if is_clin_matched:
                 assigned_role = "Clinician"
