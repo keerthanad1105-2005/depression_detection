@@ -15,27 +15,48 @@ let API_BASE = isLocalhost
     : (PROD_BACKEND_URL || window.location.origin);
 
 // Auto-resolve backend and pre-warm container to prevent spin-down latency
+let isCheckingConnectivity = false;
 async function checkBackendConnectivity() {
+    if (isCheckingConnectivity) return;
+    isCheckingConnectivity = true;
+
     const statusChip = document.getElementById("backendStatusChip");
     const statusDot = document.getElementById("backendStatusDot");
     const statusText = document.getElementById("backendStatusText");
 
-    function updateStatus(color, text) {
+    function updateStatus(color, text, clickable = false) {
         if (statusDot) statusDot.style.background = color;
         if (statusText) statusText.textContent = text;
-        if (statusChip) statusChip.style.display = "flex";
+        if (statusChip) {
+            statusChip.style.display = "flex";
+            statusChip.style.cursor = clickable ? "pointer" : "default";
+            if (clickable) {
+                statusChip.title = "Click to retry connecting to backend";
+            } else {
+                statusChip.removeAttribute("title");
+            }
+        }
+    }
+
+    if (statusChip && !statusChip.dataset.hasListener) {
+        statusChip.dataset.hasListener = "true";
+        statusChip.addEventListener("click", () => {
+            isCheckingConnectivity = false;
+            checkBackendConnectivity();
+        });
     }
 
     if (isLocalhost) {
-        // Try local backend first
+        // Try local backend first (quick check)
         try {
             const ctrl = new AbortController();
-            const timer = setTimeout(() => ctrl.abort(), 1200);
+            const timer = setTimeout(() => ctrl.abort(), 1500);
             const r = await fetch("http://127.0.0.1:8000/health", { signal: ctrl.signal });
             clearTimeout(timer);
             if (r.ok) {
                 API_BASE = "http://127.0.0.1:8000";
                 updateStatus("#10b981", "Local Server Online (127.0.0.1:8000)");
+                isCheckingConnectivity = false;
                 return;
             }
         } catch (_) {
@@ -44,22 +65,29 @@ async function checkBackendConnectivity() {
         }
     }
 
-    // Ping cloud backend to pre-warm / ensure active
-    updateStatus("#f59e0b", isLocalhost ? "Connecting to Cloud Server..." : "Connecting to Cloud Server...");
-    for (let i = 0; i < 15; i++) {
+    // Ping cloud backend to pre-warm / wake from idle (Render free-tier cold start)
+    updateStatus("#f59e0b", "Connecting to Cloud Server...");
+    
+    // We allow up to 4 attempts with a generous 20s timeout each to let Render cold-start boot
+    for (let i = 1; i <= 6; i++) {
         try {
+            if (i > 1) {
+                updateStatus("#f59e0b", `Waking up Cloud Server (${i}/6, takes ~30s)...`);
+            }
             const ctrl = new AbortController();
-            const timer = setTimeout(() => ctrl.abort(), 4000);
+            const timer = setTimeout(() => ctrl.abort(), 20000);
             const r = await fetch(`${API_BASE}/health`, { signal: ctrl.signal });
             clearTimeout(timer);
             if (r.ok) {
                 updateStatus("#10b981", isLocalhost ? "Cloud Server Connected (Fallback)" : "Cloud Server Online");
+                isCheckingConnectivity = false;
                 return;
             }
         } catch (_) {}
-        await new Promise(res => setTimeout(res, 2000));
+        await new Promise(res => setTimeout(res, 2500));
     }
-    updateStatus("#ef4444", "Backend Offline (Click to retry)");
+    updateStatus("#ef4444", "Backend Offline (Click to retry)", true);
+    isCheckingConnectivity = false;
 }
 
 if (document.readyState === "loading") {
@@ -343,7 +371,7 @@ function initAuthClient() {
 
             let response;
             let lastErr = null;
-            const maxAttempts = 3;
+            const maxAttempts = 5;
 
             for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                 try {
@@ -357,9 +385,9 @@ function initAuthClient() {
                         })
                     });
 
-                    // If Cloud container is returning 502 Bad Gateway during spin-up, retry
-                    if (response.status === 502 && attempt < maxAttempts) {
-                        btnText.textContent = `Waking up server (${attempt}/${maxAttempts})...`;
+                    // If Cloud container is sleeping or returning 502/503/504 during spin-up, retry gracefully
+                    if ([502, 503, 504, 524].includes(response.status) && attempt < maxAttempts) {
+                        btnText.textContent = `Waking up cloud server (${attempt}/${maxAttempts})...`;
                         await new Promise(r => setTimeout(r, 3000));
                         continue;
                     }
@@ -367,8 +395,8 @@ function initAuthClient() {
                 } catch (netErr) {
                     lastErr = netErr;
                     if (attempt < maxAttempts) {
-                        btnText.textContent = `Connecting to server (${attempt}/${maxAttempts})...`;
-                        await new Promise(r => setTimeout(r, 2500));
+                        btnText.textContent = `Waking up cloud server (${attempt}/${maxAttempts})...`;
+                        await new Promise(r => setTimeout(r, 3000));
                         // If localhost failed, switch to cloud backend on retry
                         if (isLocalhost && API_BASE !== PROD_BACKEND_URL) {
                             API_BASE = PROD_BACKEND_URL;
@@ -382,7 +410,7 @@ function initAuthClient() {
                 submitBtn.disabled = false;
                 btnText.textContent = "Login";
                 spinner.style.display = "none";
-                showAlert("authAlert", "Could not reach authentication server. Please check backend connection.", "error");
+                showAlert("authAlert", "Could not reach cloud server. Render is waking up from idle — please wait ~15 seconds and click Login again.", "error");
                 return;
             }
 
@@ -722,7 +750,7 @@ function initAuthClient() {
 
             let response;
             let lastErr = null;
-            const maxAttempts = 3;
+            const maxAttempts = 5;
 
             for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                 try {
@@ -738,9 +766,9 @@ function initAuthClient() {
                         })
                     });
 
-                    // If Cloud container is returning 502 during spin-up, retry
-                    if (response.status === 502 && attempt < maxAttempts) {
-                        btnText.textContent = `Waking up server (${attempt}/${maxAttempts})...`;
+                    // If Cloud container is sleeping or returning 502/503/504 during spin-up, retry
+                    if ([502, 503, 504, 524].includes(response.status) && attempt < maxAttempts) {
+                        btnText.textContent = `Waking up cloud server (${attempt}/${maxAttempts})...`;
                         await new Promise(r => setTimeout(r, 3000));
                         continue;
                     }
@@ -748,8 +776,8 @@ function initAuthClient() {
                 } catch (netErr) {
                     lastErr = netErr;
                     if (attempt < maxAttempts) {
-                        btnText.textContent = `Connecting to server (${attempt}/${maxAttempts})...`;
-                        await new Promise(r => setTimeout(r, 2500));
+                        btnText.textContent = `Waking up cloud server (${attempt}/${maxAttempts})...`;
+                        await new Promise(r => setTimeout(r, 3000));
                         if (isLocalhost && API_BASE !== PROD_BACKEND_URL) {
                             API_BASE = PROD_BACKEND_URL;
                         }
@@ -762,7 +790,7 @@ function initAuthClient() {
                 submitBtn.disabled = false;
                 btnText.textContent = "Register";
                 spinner.style.display = "none";
-                showAlert("authAlert", "Could not reach registration server. Please check backend connection.", "error");
+                showAlert("authAlert", "Could not reach registration server. Render is waking up from idle — please wait ~15 seconds and click Register again.", "error");
                 return;
             }
 
