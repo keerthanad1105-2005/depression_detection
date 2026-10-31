@@ -94,7 +94,11 @@ class VoicePipeline:
         # 2. Multilingual XLS-R-300M inference
         if is_model_trained:
             try:
-                speech, sr = librosa.load(audio_path, sr=16000, mono=True)
+                import soundfile as sf
+                speech, sr = sf.read(audio_path)
+                if speech.ndim > 1:
+                    speech = np.mean(speech, axis=1)
+                speech = speech.astype(np.float32)
                 inputs = self.processor(speech, sampling_rate=16000, return_tensors="pt")
                 with torch.no_grad():
                     logits = self.model(**inputs).logits

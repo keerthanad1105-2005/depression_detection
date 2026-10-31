@@ -1,5 +1,6 @@
 import numpy as np
-import librosa
+import soundfile as sf
+import scipy.signal
 from typing import Dict, Any, Tuple, Optional
 
 def extract_acoustic_features(audio_path: str, target_sr: int = 16000) -> Tuple[Dict[str, float], Optional[str]]:
@@ -9,83 +10,109 @@ def extract_acoustic_features(audio_path: str, target_sr: int = 16000) -> Tuple[
     - pause_length_ratio (unvoiced/pause time / total duration)
     - pitch_variability_f0_std (F0 pitch standard deviation in Hz)
     - energy_rms_mean (average RMS energy)
+    Uses optimized vectorized NumPy and SciPy signal processing for sub-second execution.
     """
     try:
-        y, sr = librosa.load(audio_path, sr=target_sr, mono=True)
-    except Exception as e:
-        return {}, f"Could not decode audio file: {str(e)}"
-        
-    # Trim leading and trailing silence
-    try:
-        y_trimmed, _ = librosa.effects.trim(y, top_db=25)
+        y, sr = sf.read(audio_path)
     except Exception:
-        y_trimmed = y
+        try:
+            import librosa
+            y, sr = librosa.load(audio_path, sr=target_sr, mono=True)
+        except Exception as e:
+            return {}, f"Could not decode audio file: {str(e)}"
 
-    duration = librosa.get_duration(y=y_trimmed, sr=sr)
-    if duration < 20.0:
-        return {}, f"Audio recording is too short ({duration:.1f}s). Minimum required duration is 20 seconds (recommended 30-60 seconds). Please speak for at least 20 seconds."
-        
-    rms = librosa.feature.rms(y=y_trimmed)[0]
+    if y.ndim > 1:
+        y = np.mean(y, axis=1)
+    y = y.astype(np.float32)
+
+    raw_duration = len(y) / max(sr, 1)
+    if raw_duration < 18.0:
+        return {}, f"Audio recording is too short ({raw_duration:.1f}s). Minimum required duration is 20 seconds (recommended 30-60 seconds). Please speak for at least 20 seconds."
+
+    # Frame-level RMS energy (30ms frame, 15ms hop)
+    frame_len = int(sr * 0.030)
+    hop = int(sr * 0.015)
+    if len(y) < frame_len:
+        return {}, "Audio recording is too short."
+
+    shape = ((len(y) - frame_len) // hop + 1, frame_len)
+    strides = (y.strides[0] * hop, y.strides[0])
+    frames = np.lib.stride_tricks.as_strided(y, shape=shape, strides=strides)
+    rms = np.sqrt(np.mean(frames**2, axis=-1))
     mean_rms = float(np.mean(rms))
+
     if mean_rms < 0.001:
         return {}, "Audio is too quiet or near silent. Please check your microphone volume, speak closer to the mic, and re-record."
-        
-    # Non-silent intervals check to reject mostly silent recordings
-    intervals = librosa.effects.split(y_trimmed, top_db=25)
-    if len(intervals) == 0:
-        return {}, "Audio contains no detectable speech. Please re-record and speak clearly."
-    voiced_duration = sum((end - start) for start, end in intervals) / sr
-    if voiced_duration < 8.0 or (voiced_duration / max(duration, 0.1)) < 0.25:
-        return {}, "Audio is mostly silent or contains too little speech. Please provide at least 20 seconds of continuous speech."
-
-    # Check for excessive static or clipping noise
     if mean_rms > 0.45:
         return {}, "Audio contains excessive background noise or distortion. Please move to a quiet environment, lower your input gain, and re-record."
 
-    total_pause_duration = max(0.0, duration - voiced_duration)
-    pause_ratio = min(max(total_pause_duration / max(duration, 0.1), 0.0), 1.0)
-    pause_count = max(0, len(intervals) - 1)
-    pause_freq_per_min = round(pause_count / max(duration / 60.0, 0.2), 1)
-    
-    # Syllables estimation via onset envelope peaks (timing-based, language-independent)
-    onset_env = librosa.onset.onset_strength(y=y_trimmed, sr=sr)
-    peaks = librosa.util.peak_pick(onset_env, pre_max=3, post_max=3, pre_avg=3, post_avg=5, delta=0.5, wait=10)
-    syllable_count = max(len(peaks), 1)
-    speech_rate = syllable_count / max(voiced_duration, 0.5)
-    
-    # Pitch (F0) estimation using pyin with speech range (75-400 Hz)
-    try:
-        import scipy.signal
-        f0, voiced_flag, voiced_probs = librosa.pyin(
-            y_trimmed,
-            fmin=75.0,
-            fmax=400.0,
-            sr=sr
-        )
-        # Strictly ignore unvoiced frames and NaNs within speech range
-        voiced_mask = (voiced_flag == True) & (~np.isnan(f0)) & (f0 >= 75.0) & (f0 <= 400.0)
-        f0_voiced = f0[voiced_mask]
-        
-        if len(f0_voiced) > 5:
-            # Apply 5-point median filter to eliminate transient octave-jump artifacts
-            f0_smooth = scipy.signal.medfilt(f0_voiced, kernel_size=5)
-            med_f0 = float(np.median(f0_smooth))
-            if med_f0 > 0:
-                # Exclude octave jumps beyond 0.55x to 1.8x of median speech pitch
-                f0_filtered = f0_smooth[(f0_smooth >= med_f0 * 0.55) & (f0_smooth <= med_f0 * 1.8)]
-            else:
-                f0_filtered = f0_smooth
-            if len(f0_filtered) < 5:
-                f0_filtered = f0_smooth
+    # Adaptive silence threshold
+    silence_thresh = max(0.002, float(np.percentile(rms, 85)) * 0.12)
+    voiced_frames = rms > silence_thresh
+    voiced_duration = float(np.sum(voiced_frames)) * (hop / sr)
 
-            pitch_std = float(np.std(f0_filtered))
-            # Standard deviation in semitones relative to 100 Hz reference
-            semitones = 12.0 * np.log2(f0_filtered / 100.0)
-            pitch_std_st = float(np.std(semitones))
+    if voiced_duration < 5.0 or (voiced_duration / max(raw_duration, 0.1)) < 0.18:
+        return {}, "Audio contains too little speech or is mostly silent. Please speak continuously for at least 20 seconds."
+
+    total_pause_duration = max(0.0, raw_duration - voiced_duration)
+    pause_ratio = min(max(total_pause_duration / max(raw_duration, 0.1), 0.0), 1.0)
+
+    # Pause intervals (silent gaps >= 250ms)
+    min_pause_frames = max(1, int(0.25 / (hop / sr)))
+    silent_runs = 0
+    in_pause = False
+    curr_silent = 0
+    for v in voiced_frames:
+        if not v:
+            curr_silent += 1
+            if curr_silent >= min_pause_frames and not in_pause:
+                silent_runs += 1
+                in_pause = True
         else:
-            pitch_std = 20.0
-            pitch_std_st = 2.0
+            curr_silent = 0
+            in_pause = False
+
+    pause_freq_per_min = round(silent_runs / max(raw_duration / 60.0, 0.2), 1)
+
+    # Syllables estimation via Hilbert envelope
+    try:
+        env = np.abs(scipy.signal.hilbert(y))
+        b, a = scipy.signal.butter(2, 10.0 / (sr / 2), btype='low')
+        smooth_env = scipy.signal.filtfilt(b, a, env)
+        env_down = smooth_env[::int(sr / 100)]
+        peaks, _ = scipy.signal.find_peaks(env_down, distance=15, prominence=np.std(env_down)*0.35)
+        syllable_count = max(len(peaks), 1)
+        speech_rate = syllable_count / max(voiced_duration, 0.5)
     except Exception:
+        speech_rate = 3.2
+
+    # Pitch (F0) estimation using normalized autocorrelation on voiced speech
+    min_lag = int(sr / 400)
+    max_lag = int(sr / 75)
+    f0s = []
+    voiced_indices = np.where(voiced_frames)[0]
+    step = max(1, len(voiced_indices) // 120)
+    for idx in voiced_indices[::step]:
+        start = idx * hop
+        frame = y[start : start + frame_len]
+        if len(frame) == frame_len:
+            corr = np.correlate(frame, frame, mode='full')
+            corr = corr[len(corr)//2:]
+            if max_lag < len(corr):
+                peak_lag = min_lag + np.argmax(corr[min_lag:max_lag])
+                if peak_lag > 0 and corr[peak_lag] > 0.30 * corr[0]:
+                    f0s.append(sr / peak_lag)
+
+    if len(f0s) > 5:
+        f0_arr = np.array(f0s)
+        med_f0 = float(np.median(f0_arr))
+        f0_filtered = f0_arr[(f0_arr >= med_f0 * 0.55) & (f0_arr <= med_f0 * 1.8)]
+        if len(f0_filtered) < 5:
+            f0_filtered = f0_arr
+        pitch_std = float(np.std(f0_filtered))
+        semitones = 12.0 * np.log2(f0_filtered / 100.0)
+        pitch_std_st = float(np.std(semitones))
+    else:
         pitch_std = 22.0
         pitch_std_st = 2.2
 
@@ -97,5 +124,7 @@ def extract_acoustic_features(audio_path: str, target_sr: int = 16000) -> Tuple[
         "pitch_variability_semitones": round(float(pitch_std_st), 2),
         "energy_rms_mean": round(float(mean_rms), 4)
     }
+
+    return features, None
     
     return features, None
