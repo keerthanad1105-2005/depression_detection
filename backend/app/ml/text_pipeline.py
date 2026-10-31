@@ -296,27 +296,30 @@ class TextPipeline:
         dep_score = 0.0
         pos_score = 0.0
         for w in words:
-            w_lower = w.lower()
+            w_lower = w.lower().strip(".,!?;:\"'()[]{}")
+            if not w_lower:
+                continue
             found_dep = MULTILINGUAL_DEP_LEXICON.get(w_lower)
-            if found_dep is None and len(w_lower) >= 3:
+            if found_dep is None and len(w_lower) >= 4:
                 for k, v in MULTILINGUAL_DEP_LEXICON.items():
-                    if len(k) >= 3 and (k in w_lower or w_lower in k):
-                        found_dep = v
+                    if len(k) >= 4 and (k == w_lower or k in w_lower):
+                        found_dep = abs(v)
                         break
             if found_dep is not None:
-                dep_score += found_dep
+                dep_score += abs(found_dep)
 
             found_pos = MULTILINGUAL_POS_LEXICON.get(w_lower)
-            if found_pos is None and len(w_lower) >= 3:
+            if found_pos is None and len(w_lower) >= 4:
                 for k, v in MULTILINGUAL_POS_LEXICON.items():
-                    if len(k) >= 3 and (k in w_lower or w_lower in k):
+                    if len(k) >= 4 and (k == w_lower or k in w_lower):
                         found_pos = abs(v)
                         break
             if found_pos is not None:
-                pos_score += found_pos
+                pos_score += abs(found_pos)
 
-        net_score = (dep_score - pos_score) / max(len(words) * 0.15, 1.0)
-        prob = 1.0 / (1.0 + torch.exp(-torch.tensor(net_score)).item())
+        # Baseline offset: -2.2 gives sigmoid(-2.2) ≈ 0.10 (Minimal depression baseline)
+        raw = -2.2 + (dep_score * 1.5) - (pos_score * 1.5)
+        prob = 1.0 / (1.0 + torch.exp(-torch.tensor(raw)).item())
         return min(max(prob, 0.05), 0.95)
 
 
